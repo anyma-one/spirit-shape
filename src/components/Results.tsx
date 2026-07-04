@@ -2,9 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { Match, MatchResult } from "../engine";
 import type { TierDef } from "../tiers";
 import { buildProsePayload } from "../prose/buildSummary";
-import { getProse } from "../prose/client";
 import { templateProse } from "../prose/template";
-import type { ProseResponse } from "../prose/types";
 import { MUDDY_COPY } from "../data/copy";
 import type { TierId } from "../data/copy";
 import { animalArtUrl } from "../data/animalArt";
@@ -56,35 +54,27 @@ const TINT: Record<FocusKey, string> = {
 export function Results({ tier, result, onRetake, onUnlock, onHome }: ResultsProps) {
   const tierScope: "speed" | "soul" = tier.id === "soul-search" ? "soul" : "speed";
   const [focus, setFocus] = useState<FocusKey>("primary");
-  const [prose, setProse] = useState<ProseResponse | null>(null);
-  const [loading, setLoading] = useState(true);
-  const savedRef = useRef(false);
+  const savedRef = useRef<MatchResult | null>(null);
 
   const advance = () => {
     const target = tier.nudge.target;
     if (target) onUnlock(target);
   };
 
-  // Primary reading via the prose pipeline (Claude when a backend exists, else the
-  // deterministic template — which is all the static app ever gets).
+  // Tiers 1-2 use the pre-written per-animal template (profiles-and-mythology-v1) —
+  // no API call. The Claude-written reading is reserved for the Deep Dive (Tier 3).
+  const primaryReading = useMemo(
+    () => templateProse(buildProsePayload(tier, result)),
+    [tier, result],
+  );
+
+  // Persist the completed result once per result (guarded against StrictMode's
+  // double-invoke, which shares the ref).
   useEffect(() => {
-    let cancelled = false;
-    setLoading(true);
-    savedRef.current = false;
-    const payload = buildProsePayload(tier, result);
-    getProse(payload).then((res) => {
-      if (cancelled) return;
-      setProse(res);
-      setLoading(false);
-      if (!savedRef.current) {
-        savedRef.current = true;
-        saveResult(buildCompletedResult(tier.id, tier.name, result, res.text, res.source));
-      }
-    });
-    return () => {
-      cancelled = true;
-    };
-  }, [tier, result]);
+    if (savedRef.current === result) return;
+    savedRef.current = result;
+    saveResult(buildCompletedResult(tier.id, tier.name, result, primaryReading, "template"));
+  }, [tier, result, primaryReading]);
 
   const { primary, secondary, split, alsoClose, muddy } = result;
 
@@ -173,8 +163,7 @@ export function Results({ tier, result, onRetake, onUnlock, onHome }: ResultsPro
 
   const focusData = data.find((a) => a.key === focus) ?? data[0];
   const isPrimary = focus === "primary";
-  const readingText = isPrimary ? prose?.text : templateReadings[focus];
-  const readingLoading = isPrimary && loading;
+  const readingText = isPrimary ? primaryReading : templateReadings[focus];
 
   // Soul Search surfaces the fuller profile: Drawn-to, Watch-for, Kin-and-rivals,
   // and the Tier 3 tease (profiles-and-mythology-v1 §1), all for the focused animal.
@@ -204,23 +193,11 @@ export function Results({ tier, result, onRetake, onUnlock, onHome }: ResultsPro
             {/* Layer 1 — Psychological profile (the focused animal's reading). */}
             <div className="panel">
               <p className="section-label">Psychological profile</p>
-              {readingLoading ? (
-                <p className="prose-loading">Writing your reading…</p>
-              ) : (
-                <>
-                  {readingText?.split("\n\n").map((para, i) => (
-                    <p key={i} className="prose-para">
-                      {para}
-                    </p>
-                  ))}
-                  {isPrimary && prose?.source === "template" && (
-                    <p className="prose-source">
-                      Generated from your trait profile. Add an Anthropic API key for a Claude-written
-                      reading.
-                    </p>
-                  )}
-                </>
-              )}
+              {readingText?.split("\n\n").map((para, i) => (
+                <p key={i} className="prose-para">
+                  {para}
+                </p>
+              ))}
 
               {/* Soul Search only: the canonical Drawn-to / Watch-for facets. */}
               {isSoul && focalProfile && (
