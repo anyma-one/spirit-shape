@@ -1,0 +1,24 @@
+# Dependencies
+node_modules
+
+# Build output
+dist
+dist-ssr
+*.tsbuildinfo
+
+# Secrets / local env (keep the example)
+.env
+.env.*
+*.local
+!.env.example
+
+# Editor / OS
+.DS_Store
+*.log
+coverage
+
+# Deploy / tooling
+.vercel
+
+# Local-only Claude settings (permissions etc.); other .claude files are shareable
+.claude/settings.local.json
