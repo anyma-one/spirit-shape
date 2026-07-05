@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { track } from "@vercel/analytics";
 import type { Answers, MatchResult } from "./engine";
 import type { TierId } from "./data/copy";
 import { TIERS } from "./tiers";
@@ -24,16 +25,26 @@ export default function App() {
 
   function startTier(tier: TierId) {
     clearProgress(tier);
+    track("quiz_start", { tier, resumed: false });
     setScreen({ name: "quiz", tier });
   }
 
   function resumeTier(tier: TierId, session: InProgressSession) {
+    track("quiz_start", { tier, resumed: true });
     setScreen({ name: "quiz", tier, resume: session });
   }
 
   function completeTier(tier: TierId, answers: Answers) {
     clearProgress(tier);
-    setScreen({ name: "loading", tier, result: TIERS[tier].run(answers) });
+    const result = TIERS[tier].run(answers);
+    track("quiz_complete", {
+      tier,
+      primary: result.primary.archetype.id,
+      secondary: result.secondary.archetype.id,
+      splitPrimary: result.split.primary,
+      muddy: result.muddy,
+    });
+    setScreen({ name: "loading", tier, result });
   }
 
   // Start (or resume) a specific tier — used by the result page's nudge and the
