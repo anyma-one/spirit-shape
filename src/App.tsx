@@ -9,6 +9,7 @@ import { Loading } from "./components/Loading";
 import { Results } from "./components/Results";
 import { clearProgress, loadProgress, saveProgress } from "./persistence/sessions";
 import type { InProgressSession } from "./persistence/sessions";
+import { logResult } from "./persistence/remoteLog";
 
 type Screen =
   | { name: "home" }
@@ -44,6 +45,7 @@ export default function App() {
       splitPrimary: result.split.primary,
       muddy: result.muddy,
     });
+    logResult(tier, result); // anonymous result -> Supabase (no-op if backend unconfigured)
     setScreen({ name: "loading", tier, result });
   }
 
