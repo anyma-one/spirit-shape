@@ -50,20 +50,52 @@ function supabaseHeaders(key: string, prefer: string): Record<string, string> {
   };
 }
 
-// Best-effort send via Resend; returns whether it was accepted. Never throws.
-async function sendEmail(opts: { to: string; subject: string; text: string }): Promise<boolean> {
+// Best-effort send via Resend; returns whether it was accepted. Never throws. `html` is
+// optional — Resend renders it and falls back to `text` for plain-text clients.
+async function sendEmail(opts: {
+  to: string;
+  subject: string;
+  text: string;
+  html?: string;
+}): Promise<boolean> {
   const resendKey = process.env.RESEND_API_KEY;
   if (!resendKey) return false;
   try {
     const r = await fetch("https://api.resend.com/emails", {
       method: "POST",
       headers: { Authorization: `Bearer ${resendKey}`, "Content-Type": "application/json" },
-      body: JSON.stringify({ from: RESEND_FROM, to: [opts.to], subject: opts.subject, text: opts.text }),
+      body: JSON.stringify({
+        from: RESEND_FROM,
+        to: [opts.to],
+        subject: opts.subject,
+        text: opts.text,
+        ...(opts.html ? { html: opts.html } : {}),
+      }),
     });
     return r.ok;
   } catch {
     return false;
   }
+}
+
+// HTML confirmation email: the copy + a confirm button + the black anyma wordmark in the
+// footer. Inline styles + light background for broad email-client support.
+function confirmEmailHtml(confirmUrl: string): string {
+  return `<!doctype html>
+<html><body style="margin:0;padding:0;background:#ffffff;">
+<div style="max-width:480px;margin:0 auto;padding:40px 28px;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;color:#211F2A;">
+  <p style="font-size:16px;line-height:1.6;margin:0 0 28px;">Almost there — please confirm you'd like to join the Deep Dive waitlist.</p>
+  <p style="margin:0 0 28px;">
+    <a href="${confirmUrl}" style="display:inline-block;background:#0A1124;color:#ffffff;text-decoration:none;font-weight:600;font-size:15px;padding:13px 30px;border-radius:999px;">Confirm my spot</a>
+  </p>
+  <p style="font-size:13px;line-height:1.6;color:#6b6a72;margin:0 0 6px;">Or paste this link into your browser:</p>
+  <p style="font-size:13px;line-height:1.6;margin:0 0 32px;word-break:break-all;"><a href="${confirmUrl}" style="color:#2f7d7d;">${confirmUrl}</a></p>
+  <p style="font-size:13px;line-height:1.6;color:#6b6a72;margin:0 0 40px;">If you didn't request this, you can ignore this email and you won't hear from us again.</p>
+  <div style="border-top:1px solid #ece8dd;padding-top:26px;text-align:center;">
+    <img src="${SITE_URL}/anyma-logo-black.png" alt="anyma" width="92" style="width:92px;height:auto;opacity:0.85;">
+  </div>
+</div>
+</body></html>`;
 }
 
 export default async function handler(req: ReqLike, res: ResLike): Promise<void> {
@@ -134,8 +166,9 @@ export default async function handler(req: ReqLike, res: ResLike): Promise<void>
   const confirmUrl = `${SITE_URL}/api/waitlist-confirm?token=${encodeURIComponent(row.token)}`;
   const sent = await sendEmail({
     to: email,
-    subject: "Confirm your anyma Deep Dive waitlist signup",
-    text: `Almost there — please confirm you'd like to join the anyma Deep Dive waitlist.\n\nConfirm here:\n${confirmUrl}\n\nIf you didn't request this, you can ignore this email and you won't hear from us again.`,
+    subject: "Confirm Your Deep Dive Waitlist Signup",
+    text: `Almost there — please confirm you'd like to join the Deep Dive waitlist.\n\nConfirm here:\n${confirmUrl}\n\nIf you didn't request this, you can ignore this email and you won't hear from us again.`,
+    html: confirmEmailHtml(confirmUrl),
   });
   if (!sent) {
     res.status(502).json({ error: "We couldn't send the confirmation email. Please try again." });

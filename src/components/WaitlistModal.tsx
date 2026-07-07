@@ -59,8 +59,8 @@ export function WaitlistModal({
             </h2>
             <p className="waitlist__lede">
               {done === "already_verified"
-                ? "You're already on the Deep Dive waitlist — we'll email you the moment it opens."
-                : "We've sent you a confirmation link. Click it to secure your spot — then we'll email you the moment the Deep Dive opens."}
+                ? "You're already on the Deep Dive waitlist. We'll email you the moment it opens."
+                : "We've sent you a confirmation link. Click it to be among the first to try the Deep Dive. We'll email you the moment it goes live."}
             </p>
             <button className="btn btn--tier btn--full" onClick={onClose}>
               Close

@@ -144,8 +144,8 @@ export default async function handler(req: ReqLike, res: ResLike): Promise<void>
     page(
       res,
       200,
-      "You're confirmed",
-      "Thank you — your spot on the Deep Dive waitlist is confirmed. We'll email you the moment it opens.",
+      "You're on the list!",
+      "Thank you for trusting anyma. Your spot on the Deep Dive waitlist is confirmed. We'll email you the moment it goes live.",
     );
     return;
   }
