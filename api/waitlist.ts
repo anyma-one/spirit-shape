@@ -1,24 +1,19 @@
-// Serverless endpoint (Vercel Node function): step 1 of the Deep Dive waitlist
-// double opt-in. Takes one email + a source tag, upserts an UNVERIFIED row in
-// Supabase, and emails the SIGNER a confirmation link. The hello@anyma.one inbox
-// ping fires later, on confirm (api/waitlist-confirm.ts) — so you're only notified
-// about consented, verified signups.
+// Serverless endpoint (Vercel Node function): step 1 of the Deep Dive waitlist double
+// opt-in. Upserts an UNVERIFIED row in Supabase and emails the SIGNER a confirmation
+// link. The hello@anyma.one inbox ping fires later, on confirm (api/waitlist-confirm.ts).
 //
-// Graceful degradation:
-//   - Supabase missing       -> 501, the modal shows "not live yet".
-//   - RESEND_API_KEY missing  -> row saved, but no email can be sent -> reported as an
-//                                error so we never silently strand an unverifiable row.
-//   - Re-signup (same email)  -> upsert; if still unverified, resend the link; if already
-//                                verified, tell them so (no new email).
+// SELF-CONTAINED on purpose: this Vercel project doesn't make a function's imports
+// available at runtime (and `_`-prefixed helper files are excluded from the bundle), so
+// each function inlines its helpers — same pattern as the working api/log-result.ts.
+//
+// Config (host env): SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY (required); RESEND_API_KEY
+// (required to send); WAITLIST_FROM / WAITLIST_SITE_URL (optional overrides).
 
-import {
-  KNOWN_SOURCES,
-  SITE_URL,
-  normalizeEmail,
-  sendEmail,
-  supabaseConfig,
-  supabaseHeaders,
-} from "./_waitlist";
+const SITE_URL = process.env.WAITLIST_SITE_URL ?? "https://www.anyma.one";
+const RESEND_FROM = process.env.WAITLIST_FROM ?? "anyma <hello@anyma.one>";
+const KNOWN_SOURCES = new Set(["home-card", "tier-nav", "locked", "nudge", "unknown"]);
+// Conservative: one @, a dot in the domain, no spaces. Mirrors the client guard.
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 interface ReqLike {
   method?: string;
@@ -28,10 +23,47 @@ interface ResLike {
   status: (code: number) => ResLike;
   json: (body: unknown) => void;
 }
-
 interface WaitlistRow {
   token: string;
   verified: boolean;
+}
+
+function normalizeEmail(raw: unknown): string | null {
+  if (typeof raw !== "string") return null;
+  const email = raw.trim().toLowerCase();
+  if (!email || email.length > 254 || !EMAIL_RE.test(email)) return null;
+  return email;
+}
+
+function supabaseConfig(): { url: string; key: string } | null {
+  const url = process.env.SUPABASE_URL;
+  const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  return url && key ? { url, key } : null;
+}
+
+function supabaseHeaders(key: string, prefer: string): Record<string, string> {
+  return {
+    apikey: key,
+    Authorization: `Bearer ${key}`,
+    "Content-Type": "application/json",
+    Prefer: prefer,
+  };
+}
+
+// Best-effort send via Resend; returns whether it was accepted. Never throws.
+async function sendEmail(opts: { to: string; subject: string; text: string }): Promise<boolean> {
+  const resendKey = process.env.RESEND_API_KEY;
+  if (!resendKey) return false;
+  try {
+    const r = await fetch("https://api.resend.com/emails", {
+      method: "POST",
+      headers: { Authorization: `Bearer ${resendKey}`, "Content-Type": "application/json" },
+      body: JSON.stringify({ from: RESEND_FROM, to: [opts.to], subject: opts.subject, text: opts.text }),
+    });
+    return r.ok;
+  } catch {
+    return false;
+  }
 }
 
 export default async function handler(req: ReqLike, res: ResLike): Promise<void> {
@@ -64,8 +96,8 @@ export default async function handler(req: ReqLike, res: ResLike): Promise<void>
   const source =
     typeof b?.source === "string" && KNOWN_SOURCES.has(b.source) ? b.source : "unknown";
 
-  // Upsert on the unique email. merge-duplicates updates only the columns we send, so
-  // an existing row's verified/token/verified_at are preserved; a new row defaults to
+  // Upsert on the unique email. merge-duplicates updates only the columns we send, so an
+  // existing row's verified/token/verified_at are preserved; a new row defaults to
   // verified=false with a fresh token. return=representation gives us that token back.
   let row: WaitlistRow;
   try {
@@ -97,8 +129,8 @@ export default async function handler(req: ReqLike, res: ResLike): Promise<void>
     return;
   }
 
-  // Send the confirmation link to the signer. This is required for opt-in, so a failure
-  // here IS surfaced (unlike the later inbox ping, which is a convenience).
+  // Send the confirmation link to the signer. Required for opt-in, so a failure here IS
+  // surfaced (unlike the later inbox ping, which is a convenience).
   const confirmUrl = `${SITE_URL}/api/waitlist-confirm?token=${encodeURIComponent(row.token)}`;
   const sent = await sendEmail({
     to: email,
