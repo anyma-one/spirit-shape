@@ -5,6 +5,7 @@ import { buildProsePayload } from "../prose/buildSummary";
 import { templateProse } from "../prose/template";
 import { MUDDY_COPY } from "../data/copy";
 import type { TierId } from "../data/copy";
+import type { WaitlistSource } from "../persistence/waitlist";
 import { animalArtUrl } from "../data/animalArt";
 import { PROFILES } from "../data/profiles";
 import { buildCompletedResult, saveResult } from "../persistence/sessions";
@@ -26,6 +27,8 @@ interface ResultsProps {
   /** Climb to / unlock a specific tier (used by the nudge and locked placeholders). */
   onUnlock: (tier: TierId) => void;
   onHome: () => void;
+  /** Open the Deep Dive waitlist (Tier 3 isn't built — its locks + nav open this). */
+  onDeepDive: (source: WaitlistSource) => void;
 }
 
 // A short epithet drawn from the animal's character note (the first phrase),
@@ -51,7 +54,7 @@ const TINT: Record<FocusKey, string> = {
 // tap a pill to focus a match; the artwork rotates and the psychological profile +
 // mythology origin below crossfade to the focused animal. Tier gating unchanged —
 // secondary unlocks at Soul Search, tertiary at Deep Dive (locked until then).
-export function Results({ tier, result, onRetake, onUnlock, onHome }: ResultsProps) {
+export function Results({ tier, result, onRetake, onUnlock, onHome, onDeepDive }: ResultsProps) {
   const tierScope: "speed" | "soul" = tier.id === "soul-search" ? "soul" : "speed";
   const [focus, setFocus] = useState<FocusKey>("primary");
   const savedRef = useRef<MatchResult | null>(null);
@@ -171,7 +174,9 @@ export function Results({ tier, result, onRetake, onUnlock, onHome }: ResultsPro
   const focalProfile = PROFILES[focusData.match.archetype.id];
 
   return (
-    <Layout header={{ tier: tier.id, onHome, onSelectTier: onUnlock }}>
+    <Layout
+      header={{ tier: tier.id, onHome, onSelectTier: onUnlock, onDeepDive: () => onDeepDive("tier-nav") }}
+    >
       <main className="view view--center view--content">
         <RevealCarousel
           animals={carouselAnimals}
@@ -222,6 +227,7 @@ export function Results({ tier, result, onRetake, onUnlock, onHome }: ResultsPro
               disclaimer={focusData.reveal.mythologyDisclaimer}
               locked={focusData.reveal.mythologyLocked}
               onUnlock={onUnlock}
+              onWaitlist={() => onDeepDive("locked")}
             />
 
             {/* Soul Search only: Kin and rivals (the focused animal's four archetypal
@@ -238,11 +244,19 @@ export function Results({ tier, result, onRetake, onUnlock, onHome }: ResultsPro
           </div>
 
           {/* Layer 3 — Symbolic echoes (vector-based; same regardless of focus). */}
-          <SymbolicProfile items={data[0].reveal.symbolic} onUnlock={onUnlock} />
+          <SymbolicProfile
+            items={data[0].reveal.symbolic}
+            onUnlock={onUnlock}
+            onWaitlist={() => onDeepDive("locked")}
+          />
 
           {/* Conversion nudge (curiosity) toward the next tier — locked pills scroll here. */}
           <div ref={nudgeRef}>
-            <ConversionNudge nudge={tier.nudge} onAdvance={advance} />
+            <ConversionNudge
+              nudge={tier.nudge}
+              onAdvance={advance}
+              onWaitlist={() => onDeepDive("nudge")}
+            />
           </div>
         </div>
 

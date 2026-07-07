@@ -12,15 +12,26 @@ export function Locked({
   label,
   unlock,
   onUnlock,
+  onWaitlist,
   tight = false,
 }: {
   label: string;
   unlock: Unlock;
   onUnlock: (tier: TierId) => void;
+  /** When the unlock tier isn't built yet (Deep Dive), open the waitlist instead of
+      showing an inert "soon" chip. */
+  onWaitlist?: () => void;
   tight?: boolean;
 }) {
   const available = unlock.tierId !== null;
-  const cta = (
+  // Not built yet, but we can still capture interest via the waitlist.
+  const waitlistable = !available && !!onWaitlist;
+  const cta = waitlistable ? (
+    <button className="locked__cta" title="Join the waitlist" onClick={onWaitlist}>
+      Unlock at {unlock.label}
+      <span className="locked__soon">waitlist</span>
+    </button>
+  ) : (
     <button
       className="locked__cta"
       disabled={!available}

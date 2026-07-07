@@ -98,11 +98,18 @@ body,
   color: var(--turquoise);
   border-color: var(--turquoise);
 }
-.tier-nav__link--soon,
-.tier-nav__link--soon:hover {
+.tier-nav__link--soon {
   color: var(--text-muted);
   border-color: var(--border-hairline);
   opacity: 0.5;
+}
+/* Clickable (opens the waitlist): brighten on hover; only truly-disabled is inert. */
+.tier-nav__link--soon:hover:not(:disabled) {
+  color: var(--turquoise);
+  border-color: var(--turquoise);
+  opacity: 0.85;
+}
+.tier-nav__link--soon:disabled {
   cursor: default;
 }
 .iconbtn {
@@ -1739,12 +1746,21 @@ body,
 }
 /* "Coming soon" teaser CTA (e.g. Deep Dive before it's built): a clean tier-tinted
    ghost, NOT a dimmed control — reads as a preview, not a broken button. */
-.note__cta--soon:disabled {
-  opacity: 1;
-  cursor: default;
+/* Deep Dive teaser: the tier isn't built, but the button opens the waitlist, so it's
+   interactive. Keep the tinted "coming soon" look; add a hover; only truly-disabled
+   (no waitlist handler) is inert. */
+.note__cta--soon {
   color: var(--cream-70);
   border-color: color-mix(in oklab, var(--tier) 40%, transparent);
   background: color-mix(in oklab, var(--tier) 6%, transparent);
+}
+.note__cta--soon:hover:not(:disabled) {
+  border-color: color-mix(in oklab, var(--tier) 65%, transparent);
+  background: color-mix(in oklab, var(--tier) 14%, transparent);
+}
+.note__cta--soon:disabled {
+  opacity: 1;
+  cursor: default;
 }
 .note__soon {
   font-size: 0.6rem;
@@ -1876,5 +1892,340 @@ body,
   }
   .symbolic__row {
     gap: var(--space-4);
+  }
+}
+
+/* ================================================= Waitlist modal ========= */
+/* Deep Dive (Phase 3) isn't built — its buttons open this to capture interest. */
+.waitlist {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: var(--space-6);
+}
+.waitlist__backdrop {
+  position: absolute;
+  inset: 0;
+  background: var(--void-80);
+  backdrop-filter: blur(4px);
+  animation: waitlist-fade var(--dur-base) var(--ease-soft);
+}
+.waitlist__panel {
+  position: relative;
+  width: min(440px, 100%);
+  background: var(--indigo);
+  border: 1px solid var(--border-hairline);
+  border-radius: var(--radius-lg);
+  padding: var(--space-8) var(--space-7) var(--space-7);
+  box-shadow: 0 24px 80px rgba(0, 0, 0, 0.5), 0 0 60px color-mix(in oklab, var(--tier) 18%, transparent);
+  animation: waitlist-rise var(--dur-base) var(--ease-out);
+}
+.waitlist__close {
+  position: absolute;
+  top: var(--space-4);
+  right: var(--space-5);
+  width: 32px;
+  height: 32px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+  border: none;
+  border-radius: var(--radius-pill);
+  color: var(--cream-45);
+  font-size: 1.5rem;
+  line-height: 1;
+  cursor: pointer;
+  transition: color var(--dur-fast), background var(--dur-fast);
+}
+.waitlist__close:hover {
+  color: var(--cream);
+  background: var(--cream-06);
+}
+.waitlist__eyebrow {
+  display: block;
+  font-family: var(--font-sans);
+  font-size: var(--text-xs);
+  text-transform: uppercase;
+  letter-spacing: var(--tracking-label);
+  color: var(--tier);
+  margin-bottom: var(--space-3);
+}
+.waitlist__title {
+  font-family: var(--font-display);
+  font-size: 1.9rem;
+  color: var(--cream);
+  margin: 0 0 var(--space-4);
+}
+.waitlist__lede {
+  font-family: var(--font-sans);
+  font-size: var(--text-sm);
+  line-height: 1.55;
+  color: var(--cream-70);
+  margin: 0 0 var(--space-5);
+}
+.waitlist__call {
+  font-family: var(--font-sans);
+  font-size: var(--text-base);
+  font-weight: var(--w-medium);
+  color: var(--cream);
+  margin: 0 0 var(--space-6);
+}
+.waitlist__form {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+.waitlist__input {
+  width: 100%;
+  height: var(--control-md);
+  padding: 0 var(--space-5);
+  background: var(--void);
+  border: 1px solid var(--border-hairline);
+  border-radius: var(--radius-pill);
+  color: var(--cream);
+  font-family: var(--font-sans);
+  font-size: var(--text-base);
+  transition: border-color var(--dur-fast), box-shadow var(--dur-fast);
+}
+.waitlist__input::placeholder {
+  color: var(--cream-45);
+}
+.waitlist__input:focus {
+  outline: none;
+  border-color: var(--tier);
+  box-shadow: 0 0 0 3px color-mix(in oklab, var(--tier) 24%, transparent);
+}
+.waitlist__input[aria-invalid="true"] {
+  border-color: #e2a1a1;
+}
+.waitlist__error {
+  margin: 0;
+  font-family: var(--font-sans);
+  font-size: var(--text-sm);
+  color: #e2a1a1;
+}
+.waitlist__fine {
+  margin: var(--space-5) 0 0;
+  font-family: var(--font-sans);
+  font-size: var(--text-xs);
+  color: var(--cream-45);
+  text-align: center;
+}
+.waitlist__done {
+  text-align: center;
+}
+.waitlist__done .waitlist__lede {
+  margin-bottom: var(--space-7);
+}
+@keyframes waitlist-fade {
+  from {
+    opacity: 0;
+  }
+}
+@keyframes waitlist-rise {
+  from {
+    opacity: 0;
+    transform: translateY(12px);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .waitlist__backdrop,
+  .waitlist__panel {
+    animation: none;
+  }
+}
+
+/* ================================================= Site footer =========== */
+/* Legal links on every page (Impressum reachable in one click — § 5 DDG). */
+.site-footer {
+  margin-top: auto;
+  padding: var(--space-7) var(--space-6) var(--space-8);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-3);
+  border-top: 1px solid var(--border-hairline);
+}
+.site-footer__links {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: var(--space-5);
+}
+.site-footer__links a {
+  color: var(--text-secondary);
+  text-decoration: none;
+  font-family: var(--font-sans);
+  font-size: var(--text-sm);
+  letter-spacing: 0.02em;
+  transition: color var(--dur-fast);
+}
+.site-footer__links a:hover {
+  color: var(--turquoise);
+}
+.site-footer__brand {
+  margin: 0;
+  color: var(--text-muted);
+  font-family: var(--font-sans);
+  font-size: var(--text-xs);
+}
+
+/* ============================================ Legal overlay ============== */
+/* Full-screen Impressum / Privacy / Terms, hash-routed by App, its own scroll
+   container (the app is overflow:hidden, so this must scroll itself). */
+body.no-scroll {
+  overflow: hidden;
+}
+.legal {
+  position: fixed;
+  inset: 0;
+  z-index: 90;
+  display: flex;
+  flex-direction: column;
+  background: var(--void);
+  animation: waitlist-fade var(--dur-base) var(--ease-soft);
+}
+.legal__bar {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-4);
+  padding: var(--space-4) var(--space-6);
+  border-bottom: 1px solid var(--border-hairline);
+  background: color-mix(in oklab, var(--void) 86%, black);
+}
+.legal__home {
+  padding: 0;
+  background: none;
+  border: none;
+  cursor: pointer;
+  font-family: var(--font-display);
+  font-size: 1.4rem;
+  color: var(--cream);
+}
+.legal__tabs {
+  display: flex;
+  gap: var(--space-4);
+}
+.legal__tab {
+  padding: 4px 2px;
+  color: var(--text-secondary);
+  text-decoration: none;
+  font-family: var(--font-sans);
+  font-size: var(--text-sm);
+  border-bottom: 2px solid transparent;
+  transition: color var(--dur-fast), border-color var(--dur-fast);
+}
+.legal__tab:hover {
+  color: var(--cream);
+}
+.legal__tab--active {
+  color: var(--turquoise);
+  border-bottom-color: var(--turquoise);
+}
+.legal__close {
+  width: 36px;
+  height: 36px;
+  background: none;
+  border: none;
+  border-radius: var(--radius-pill);
+  color: var(--text-secondary);
+  font-size: 1.6rem;
+  line-height: 1;
+  cursor: pointer;
+  transition: color var(--dur-fast), background var(--dur-fast);
+}
+.legal__close:hover {
+  color: var(--cream);
+  background: var(--cream-06);
+}
+.legal__scroll {
+  flex: 1;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+}
+.legal__doc {
+  max-width: 720px;
+  margin: 0 auto;
+  padding: var(--space-8) var(--space-6) var(--space-10);
+  color: var(--cream-70);
+  font-family: var(--font-sans);
+  font-size: var(--text-base);
+  line-height: var(--leading-relaxed);
+}
+.legal__title {
+  margin: 0 0 var(--space-3);
+  font-family: var(--font-display);
+  font-size: clamp(2rem, 5vw, 2.8rem);
+  color: var(--cream);
+}
+.legal__lede,
+.legal__updated {
+  margin: 0 0 var(--space-6);
+  color: var(--text-muted);
+  font-size: var(--text-sm);
+}
+.legal__h2 {
+  margin: var(--space-7) 0 var(--space-3);
+  font-family: var(--font-display);
+  font-size: 1.35rem;
+  color: var(--cream);
+}
+.legal__h3 {
+  margin: var(--space-6) 0 var(--space-3);
+  font-family: var(--font-sans);
+  font-size: var(--text-lg);
+  font-weight: var(--w-medium);
+  color: var(--cream);
+}
+.legal__rule {
+  margin: var(--space-7) 0;
+  border: none;
+  border-top: 1px solid var(--border-hairline);
+}
+.legal__p,
+.legal__block {
+  margin: 0 0 var(--space-4);
+}
+.legal__block {
+  color: var(--cream);
+}
+.legal__list {
+  margin: 0 0 var(--space-4);
+  padding-left: var(--space-6);
+}
+.legal__list li {
+  margin-bottom: var(--space-3);
+}
+.legal__doc a {
+  color: var(--turquoise);
+}
+.legal__doc strong {
+  color: var(--cream);
+  font-weight: var(--w-medium);
+}
+@media (max-width: 560px) {
+  .legal__bar {
+    padding: var(--space-3) var(--space-4);
+    gap: var(--space-3);
+  }
+  .legal__home {
+    font-size: 1.2rem;
+  }
+  .legal__tabs {
+    gap: var(--space-3);
+  }
+  .legal__tab {
+    font-size: var(--text-xs);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .legal {
+    animation: none;
   }
 }

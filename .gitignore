@@ -22,3 +22,5 @@ coverage
 
 # Local-only Claude settings (permissions etc.); other .claude files are shareable
 .claude/settings.local.json
+# Preview launch config — hardcodes a machine-specific node path
+.claude/launch.json

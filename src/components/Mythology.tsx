@@ -12,6 +12,7 @@ export function Mythology({
   disclaimer,
   locked,
   onUnlock,
+  onWaitlist,
 }: {
   animalName: string;
   paras: string[];
@@ -19,6 +20,7 @@ export function Mythology({
   disclaimer: string | null;
   locked: RevealItem[];
   onUnlock: (tier: TierId) => void;
+  onWaitlist?: () => void;
 }) {
   if (paras.length === 0 && locked.length === 0) return null;
 
@@ -39,7 +41,13 @@ export function Mythology({
         )}
         {disclaimer && <p className="mythology__disclaimer">{disclaimer}</p>}
         {locked.map((item) => (
-          <Locked key={item.label} label={item.label} unlock={item.unlock!} onUnlock={onUnlock} />
+          <Locked
+            key={item.label}
+            label={item.label}
+            unlock={item.unlock!}
+            onUnlock={onUnlock}
+            onWaitlist={onWaitlist}
+          />
         ))}
       </div>
     </div>

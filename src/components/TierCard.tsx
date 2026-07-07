@@ -3,6 +3,9 @@ import { Badge } from "./ui/Badge";
 // Click-to-start tier card. The whole card is the primary action (resume-or-start,
 // decided by the caller); a small "Start over" appears only when a saved session
 // exists. The turquoise aura is a hover effect (see styles.css). data-tier on root.
+// `disabled` only sets the muted "coming soon" styling — a card can still be muted
+// yet clickable (the Deep Dive card is: it opens the waitlist), so the full-card
+// action renders whenever onSelect is given, independent of disabled.
 export function TierCard({
   scope,
   badgeLabel,
@@ -13,6 +16,7 @@ export function TierCard({
   disabled = false,
   onSelect,
   onStartOver,
+  actionLabel,
 }: {
   scope: "speed" | "soul" | "deep";
   badgeLabel: string;
@@ -23,6 +27,8 @@ export function TierCard({
   disabled?: boolean;
   onSelect?: () => void;
   onStartOver?: () => void;
+  /** aria-label for the full-card action. Defaults to `Start ${name}`. */
+  actionLabel?: string;
 }) {
   return (
     <div className={`tier-card${disabled ? " tier-card--disabled" : ""}`} data-tier={scope}>
@@ -40,8 +46,12 @@ export function TierCard({
         </div>
       </div>
 
-      {!disabled && (
-        <button className="tier-card__main" onClick={onSelect} aria-label={`Start ${name}`} />
+      {onSelect && (
+        <button
+          className="tier-card__main"
+          onClick={onSelect}
+          aria-label={actionLabel ?? `Start ${name}`}
+        />
       )}
       {!disabled && onStartOver && (
         <button className="tier-card__startover" onClick={onStartOver}>

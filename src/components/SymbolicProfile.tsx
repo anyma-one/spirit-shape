@@ -9,9 +9,11 @@ import { Locked } from "./ui/Locked";
 export function SymbolicProfile({
   items,
   onUnlock,
+  onWaitlist,
 }: {
   items: RevealItem[];
   onUnlock: (tier: TierId) => void;
+  onWaitlist?: () => void;
 }) {
   return (
     <div className="panel">
@@ -33,6 +35,7 @@ export function SymbolicProfile({
               label={item.label}
               unlock={item.unlock!}
               onUnlock={onUnlock}
+              onWaitlist={onWaitlist}
               tight
             />
           ),
