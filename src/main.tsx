@@ -2,6 +2,7 @@ import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 import { Analytics } from "@vercel/analytics/react";
 import App from "./App";
+import "./fonts.css"; // self-hosted @font-face (was Google Fonts @import — removed for GDPR)
 import "./tokens.css"; // design-system tokens + base + atmosphere (load first)
 import "./styles.css";
 

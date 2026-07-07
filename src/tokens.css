@@ -2,12 +2,11 @@
    Spirit Animal — Design Tokens (flattened, single file)
    ------------------------------------------------------------
    All token layers + base concatenated for easy drop-in. Link this
-   ONE file, or paste into your global stylesheet. Fonts load from
-   Google Fonts (see @import at top). Source of truth is the modular
-   files in design_system/tokens/*.css.
+   ONE file, or paste into your global stylesheet. Fonts are SELF-HOSTED
+   (see src/fonts.css, imported first in main.tsx) — the old Google Fonts
+   @import was removed so no visitor IP is sent to Google's CDN (GDPR).
+   Source of truth is the modular files in design_system/tokens/*.css.
    ============================================================ */
-
-@import url('https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,400;0,500;0,600;0,700;1,400;1,500&family=Hanken+Grotesk:wght@300;400;500;600;700&family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,500;0,6..72,600;1,6..72,400&display=swap');
 
 
 /* ===== tokens/colors.css ===== */
