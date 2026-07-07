@@ -63,20 +63,35 @@ function brandPage(title: string, message: string): string {
 <title>${title} · anyma</title>
 <style>
   :root { color-scheme: dark; }
+  /* Self-hosted brand fonts — the same variable woff2 the app serves at /fonts/ (Latin
+     subset covers this page's copy). Without these the heading falls back to Georgia. */
+  @font-face { font-family:"Cormorant Garamond"; font-style:normal; font-weight:400 700;
+    font-display:swap; src:url(${SITE_URL}/fonts/cormorant-garamond-5.woff2) format("woff2"); }
+  @font-face { font-family:"Hanken Grotesk"; font-style:normal; font-weight:300 700;
+    font-display:swap; src:url(${SITE_URL}/fonts/hanken-grotesk-4.woff2) format("woff2"); }
+  * { box-sizing:border-box; }
   body { margin:0; min-height:100vh; display:flex; align-items:center; justify-content:center;
     background:#0A1124; color:#EDE8D9;
     font-family:"Hanken Grotesk",ui-sans-serif,system-ui,-apple-system,sans-serif; padding:24px; }
-  .card { max-width:440px; text-align:center; background:#14253F; border:1px solid rgba(237,232,217,0.12);
-    border-radius:24px; padding:48px 32px; box-shadow:0 24px 80px rgba(0,0,0,0.5); }
-  h1 { font-family:"Cormorant Garamond",Georgia,serif; font-size:2rem; margin:0 0 12px; }
-  p { color:rgba(237,232,217,0.7); line-height:1.55; margin:0 0 24px; }
-  a { display:inline-block; background:#4FC4C4; color:#0A1124; text-decoration:none;
-    font-weight:600; padding:12px 28px; border-radius:999px; }
+  .card { max-width:460px; width:100%; text-align:center; background:#14253F;
+    border:1px solid rgba(237,232,217,0.12); border-radius:24px; padding:56px 40px;
+    box-shadow:0 24px 80px rgba(0,0,0,0.5); }
+  .logo { width:104px; height:auto; opacity:0.92; margin:0 0 30px; }
+  h1 { font-family:"Cormorant Garamond",Georgia,serif; font-weight:600; font-size:2.4rem;
+    line-height:1.1; letter-spacing:0.01em; margin:0 0 16px; }
+  p { color:rgba(237,232,217,0.7); font-size:1rem; line-height:1.6; margin:0 0 32px; }
+  a.btn { display:inline-block; background:transparent; color:#4FC4C4; text-decoration:none;
+    font-weight:600; font-size:0.95rem; padding:13px 32px; border-radius:999px;
+    border:1px solid rgba(79,196,196,0.45); box-shadow:inset 0 0 16px rgba(79,196,196,0.06);
+    transition:background .25s ease,color .25s ease,border-color .25s ease,box-shadow .25s ease; }
+  a.btn:hover { background:#4FC4C4; color:#0A1124; border-color:#4FC4C4;
+    box-shadow:0 0 20px 2px rgba(79,196,196,0.4),0 0 46px 10px rgba(79,196,196,0.18); }
 </style></head>
 <body><div class="card">
+  <img class="logo" src="${SITE_URL}/anyma-logo.png" alt="anyma">
   <h1>${title}</h1>
   <p>${message}</p>
-  <a href="${SITE_URL}">Back to anyma</a>
+  <a class="btn" href="${SITE_URL}">Back to anyma</a>
 </div></body></html>`;
 }
 
