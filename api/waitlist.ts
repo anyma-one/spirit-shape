@@ -11,7 +11,7 @@
 
 const SITE_URL = process.env.WAITLIST_SITE_URL ?? "https://www.anyma.one";
 const RESEND_FROM = process.env.WAITLIST_FROM ?? "anyma <hello@anyma.one>";
-const KNOWN_SOURCES = new Set(["home-card", "tier-nav", "locked", "nudge", "unknown"]);
+const KNOWN_SOURCES = new Set(["home-card", "tier-nav", "locked", "nudge", "link", "unknown"]);
 // Conservative: one @, a dot in the domain, no spaces. Mirrors the client guard.
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 

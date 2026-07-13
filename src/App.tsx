@@ -33,25 +33,48 @@ function parseLegalHash(): LegalPage | null {
   return null;
 }
 
+// Shareable deep link to the sign-up form: anyma.one/#waitlist (or #join) lands on the
+// page and auto-opens the waitlist modal. Signups from it are tagged source "link".
+const WAITLIST_HASHES = new Set(["waitlist", "join"]);
+function isWaitlistHash(): boolean {
+  return WAITLIST_HASHES.has(window.location.hash.replace(/^#/, ""));
+}
+
 // Each screen renders its own night Shell/Header (handoff pattern), so App is
 // just the screen state machine: landing → quiz → loading → reveal.
 export default function App() {
   const [screen, setScreen] = useState<Screen>({ name: "home" });
   // Deep Dive (Phase 3) isn't built — its buttons open a waitlist instead. Null = closed.
-  const [waitlist, setWaitlist] = useState<WaitlistSource | null>(null);
+  // Open the waitlist on first load if arrived via the #waitlist deep link.
+  const [waitlist, setWaitlist] = useState<WaitlistSource | null>(() =>
+    isWaitlistHash() ? "link" : null,
+  );
   // Legal overlay, driven entirely by the URL hash (footer links, tabs, Back button).
   const [legal, setLegal] = useState<LegalPage | null>(() => parseLegalHash());
 
   useEffect(() => {
-    const onHashChange = () => setLegal(parseLegalHash());
+    // Count a landing that came straight in on the deep link.
+    if (isWaitlistHash()) track("waitlist_open", { source: "link" });
+    const onHashChange = () => {
+      setLegal(parseLegalHash());
+      if (isWaitlistHash()) openWaitlist("link");
+    };
     window.addEventListener("hashchange", onHashChange);
     return () => window.removeEventListener("hashchange", onHashChange);
   }, []);
 
-  const closeLegal = () => {
-    // Drop the hash without leaving a bare "#", then close.
+  // Drop the hash without leaving a bare "#".
+  const clearHash = () =>
     window.history.replaceState(null, "", window.location.pathname + window.location.search);
+
+  const closeLegal = () => {
+    clearHash();
     setLegal(null);
+  };
+
+  const closeWaitlist = () => {
+    if (isWaitlistHash()) clearHash();
+    setWaitlist(null);
   };
 
   const goHome = () => setScreen({ name: "home" });
@@ -145,9 +168,7 @@ export default function App() {
   return (
     <>
       {screenEl}
-      {waitlist !== null && (
-        <WaitlistModal source={waitlist} onClose={() => setWaitlist(null)} />
-      )}
+      {waitlist !== null && <WaitlistModal source={waitlist} onClose={closeWaitlist} />}
       {legal !== null && <Legal page={legal} onClose={closeLegal} />}
     </>
   );
