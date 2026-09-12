@@ -6,12 +6,15 @@ import { Icon } from "./Icon";
 import { ProgressBar } from "./ProgressBar";
 import { Footer } from "./Footer";
 
-// Map our tier ids to the design system's [data-tier] scope names.
-export const tierScope = (id: TierId): "speed" | "soul" => (id === "speed-run" ? "speed" : "soul");
+// Map our tier ids to the design system's [data-tier] scope names. "deep" is the
+// Deep Dive: not a TierId (it has no TierDef), but it has its own mood scope.
+export type TierScope = "speed" | "soul" | "deep";
+export const tierScope = (id: TierId | "deep"): TierScope =>
+  id === "deep" ? "deep" : id === "speed-run" ? "speed" : "soul";
 
 interface HeaderConfig {
   /** Active tier — sets the mood scope and shows the tier badge. */
-  tier?: TierId | null;
+  tier?: TierId | "deep" | null;
   showBack?: boolean;
   onBack?: () => void;
   onHome?: () => void;
@@ -44,7 +47,11 @@ export function Layout({ header, children }: { header: HeaderConfig; children: R
               </button>
             ) : (
               <button className="brand-lockup" onClick={onHome} aria-label="anyma — home">
-                <img className="brand-lockup__logo" src="/anyma-logo.png" alt="anyma" />
+                <img
+                  className="brand-lockup__logo"
+                  src={`${import.meta.env.BASE_URL}anyma-logo.png`}
+                  alt="anyma"
+                />
               </button>
             )}
           </div>
@@ -89,7 +96,10 @@ export function Layout({ header, children }: { header: HeaderConfig; children: R
                 </button>
               </nav>
             ) : (
-              tier && <Badge variant="tier">{TIERS[tier].name}</Badge>
+              // "deep" has no TierDef, so its badge label is spelled out here.
+              tier && (
+                <Badge variant="tier">{tier === "deep" ? "Deep Dive" : TIERS[tier].name}</Badge>
+              )
             )}
           </div>
         </header>

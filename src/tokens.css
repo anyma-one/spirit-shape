@@ -53,6 +53,7 @@
   --void-60:     rgba(10, 17, 36, 0.60);
   --cream-70:    rgba(237, 232, 217, 0.70);
   --cream-45:    rgba(237, 232, 217, 0.45);
+  --cream-30:    rgba(237, 232, 217, 0.30); /* legal/consent fine print */
   --cream-12:    rgba(237, 232, 217, 0.12); /* hairline on dark */
   --cream-06:    rgba(237, 232, 217, 0.06); /* faint fill on dark */
   --turquoise-16:rgba(79, 196, 196, 0.16);  /* selected ground */

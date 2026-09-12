@@ -14,7 +14,10 @@ const LABELS: Record<LegalPage, string> = {
   terms: "Terms",
 };
 
-const UPDATED = "7 July 2026";
+// Bump whenever the policy text changes — it is the date shown to readers and the
+// only version marker they have. Last change: Deep Dive brought into present tense
+// and its data handling described (2026-07-30).
+const UPDATED = "30 July 2026";
 const CONTACT = "hello@anyma.one";
 
 export function Legal({ page, onClose }: { page: LegalPage; onClose: () => void }) {
@@ -119,7 +122,10 @@ function ImprintAndPrivacy() {
         <li>
           <strong>On our server:</strong> we keep an anonymous record of results (a trait pattern and
           the resulting animal, with no name, email, or other identifier) to understand and improve
-          the service.
+          the service. For the Deep Dive this record also holds the two animals the reading named,
+          and, if you give one, the 1-to-5 rating of how much the reading felt like you. It contains
+          no part of what you wrote: the wording of your answers is removed before the record is
+          saved, leaving only the numeric trait scores.
         </li>
         <li>
           <strong>Purpose and legal basis:</strong> providing the reading you requested
@@ -135,12 +141,17 @@ function ImprintAndPrivacy() {
         answers are not sent to any external AI provider to produce them.
       </p>
       <p className="legal__p">
-        The Deep Dive (a deeper tier, not yet available) will generate an individual report using the
-        Claude API provided by Anthropic, acting as our processor. When you use it, the free-text
-        answers you choose to write, together with your computed result, are sent to Anthropic solely
-        to produce your report; they are not used to identify you or to train Anthropic's models.
-        Please do not enter anything in free-text fields that you would not want processed by our
-        provider.
+        The Deep Dive is different. It is a written interview, and it generates an individual report
+        using the Claude API provided by Anthropic, acting as our processor. The answers you write,
+        together with your computed result, are sent to Anthropic solely to conduct the interview and
+        produce your report. They are not used to identify you and not used to train Anthropic's
+        models. Please do not write anything you would not want processed by our provider.
+      </p>
+      <p className="legal__p">
+        <strong>We do not keep what you write.</strong> Your answers are processed to produce your
+        reading and are not stored on our server afterwards. A copy stays in your own browser so you
+        can leave the interview and come back to it (see "Cookies and local storage"), and you can
+        clear that at any time.
       </p>
       <ul className="legal__list">
         <li>Legal basis: providing the reading you requested (Art. 6(1)(b)).</li>
@@ -189,8 +200,10 @@ function ImprintAndPrivacy() {
       <ul className="legal__list">
         <li>
           <strong>Local storage (strictly necessary):</strong> we store your quiz progress and last
-          result in your browser so the app can save and resume your session. This is functional and
-          stays on your device; you can clear it any time through your browser settings.
+          result in your browser so the app can save and resume your session. For the Deep Dive this
+          includes the full interview so far, in your own words, so that a long conversation survives
+          closing the tab. All of it is functional and stays on your device; you can clear it any
+          time through your browser settings, and starting a new Deep Dive replaces it.
         </li>
         <li>
           <strong>Cookieless analytics:</strong> as described above, no cookies are involved.
@@ -204,11 +217,11 @@ function ImprintAndPrivacy() {
       <h3 className="legal__h3">6. Hosting and international transfers</h3>
       <p className="legal__p">
         The site is hosted by Vercel. Our database provider, Supabase, stores data in the EU, so no
-        transfer outside the EEA is involved there. Two providers are located in or transfer data to
-        the United States: Vercel (hosting and server logs, which may include technical data such as
-        IP addresses) and Resend (which sends the waitlist confirmation and notification emails). The
-        Deep Dive tier will additionally involve Anthropic (United States); this applies only once
-        that tier is available.
+        transfer outside the EEA is involved there. Three providers are located in or transfer data
+        to the United States: Vercel (hosting and server logs, which may include technical data such
+        as IP addresses), Resend (which sends the waitlist confirmation and notification emails), and
+        Anthropic, which receives what you write during a Deep Dive interview in order to produce
+        your reading. The Speed Run and Soul Search tiers do not involve Anthropic at all.
       </p>
       <p className="legal__p">
         Where data is transferred to the United States, it is safeguarded by appropriate measures
@@ -225,7 +238,14 @@ function ImprintAndPrivacy() {
         </li>
         <li>
           <strong>The anonymous result record</strong> contains no personal identifier and is kept to
-          improve the service.
+          improve the service. The same applies to the Deep Dive record described in section 1.
+          Because neither can be traced back to a person, there is nothing in them for us to find or
+          delete on request.
+        </li>
+        <li>
+          <strong>What you write in a Deep Dive</strong> is not kept by us at all. It is sent to
+          Anthropic to produce your reading and is not stored on our server afterwards; the only
+          copy is the one in your own browser, which you control.
         </li>
         <li>
           <strong>Waitlist email</strong> is kept until you unsubscribe or ask for deletion, or until

@@ -3,7 +3,6 @@ import type { TierId } from "../data/copy";
 import { TIERS } from "../tiers";
 import { latestResult, loadProgress } from "../persistence/sessions";
 import type { InProgressSession } from "../persistence/sessions";
-import type { WaitlistSource } from "../persistence/waitlist";
 import { TierCard } from "./TierCard";
 import { Button } from "./ui/Button";
 import { Icon } from "./ui/Icon";
@@ -17,12 +16,12 @@ export function Home({
   onStart,
   onResume,
   onHome,
-  onDeepDive,
+  onStartDeepDive,
 }: {
   onStart: (tier: TierId) => void;
   onResume: (tier: TierId, session: InProgressSession) => void;
   onHome: () => void;
-  onDeepDive: (source: WaitlistSource) => void;
+  onStartDeepDive: () => void;
 }) {
   const last = latestResult();
   const speedSession = loadProgress("speed-run");
@@ -115,13 +114,12 @@ export function Home({
           <TierCard
             scope="deep"
             badgeLabel="Deep Dive"
-            name="Coming Soon …"
-            tagline="Receive a personalised report and full insight into your mythological connection. Join the waitlist to be first in."
+            name="The Deep End"
+            tagline="Receive a personalised report and full insight into your profile and mythological connection."
             meta="Free form · individual"
             commitment="30–60 min"
-            disabled
-            onSelect={() => onDeepDive("home-card")}
-            actionLabel="Join the Deep Dive waitlist"
+            onSelect={onStartDeepDive}
+            actionLabel="Begin the Deep Dive"
           />
         </div>
 

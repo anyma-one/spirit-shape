@@ -10,14 +10,21 @@ export function SymbolicProfile({
   items,
   onUnlock,
   onWaitlist,
+  bare = false,
 }: {
   items: RevealItem[];
   onUnlock: (tier: TierId) => void;
   onWaitlist?: () => void;
+  /**
+   * Drop the panel chrome and the "Symbolic echoes" label, for callers that supply
+   * their own (the Tier-3 result page renders this inside a collapsible row whose
+   * header already carries the title). Additive: Tiers 1-2 omit it and are unchanged.
+   */
+  bare?: boolean;
 }) {
   return (
-    <div className="panel">
-      <p className="section-label">Symbolic echoes</p>
+    <div className={bare ? "" : "panel"}>
+      {!bare && <p className="section-label">Symbolic echoes</p>}
       <p className="symbolic__framing">{SYMBOLIC_FRAMING}</p>
       <div className="reveal-list">
         {items.map((item) =>

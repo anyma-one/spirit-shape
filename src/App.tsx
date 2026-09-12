@@ -7,6 +7,7 @@ import { Home } from "./components/Home";
 import { Quiz } from "./components/Quiz";
 import { Loading } from "./components/Loading";
 import { Results } from "./components/Results";
+import { DeepDive } from "./components/DeepDive";
 import { WaitlistModal } from "./components/WaitlistModal";
 import { Legal } from "./components/Legal";
 import type { LegalPage } from "./components/Legal";
@@ -19,7 +20,8 @@ type Screen =
   | { name: "home" }
   | { name: "quiz"; tier: TierId; resume?: InProgressSession }
   | { name: "loading"; tier: TierId; result: MatchResult }
-  | { name: "reveal"; tier: TierId; result: MatchResult };
+  | { name: "reveal"; tier: TierId; result: MatchResult }
+  | { name: "deepdive" };
 
 // Legal pages are hash-routed (#impressum / #privacy / #terms) and render as an overlay
 // above whatever screen is active — so the footer's Impressum link works from anywhere
@@ -43,8 +45,17 @@ function isWaitlistHash(): boolean {
 // Each screen renders its own night Shell/Header (handoff pattern), so App is
 // just the screen state machine: landing → quiz → loading → reveal.
 export default function App() {
-  const [screen, setScreen] = useState<Screen>({ name: "home" });
-  // Deep Dive (Phase 3) isn't built — its buttons open a waitlist instead. Null = closed.
+  const [screen, setScreen] = useState<Screen>(() =>
+    // DEV ONLY: #deep-preview opens the Deep Dive straight to its result screen and
+    // #deep-preview-chat straight to the interview, both seeded from fixtures in
+    // DeepDive.tsx — no interview, no API spend. Statically false in a production
+    // build, so Rollup drops it. Safe to delete.
+    import.meta.env.DEV && window.location.hash.startsWith("#deep-preview")
+      ? { name: "deepdive" }
+      : { name: "home" },
+  );
+  // Deep Dive waitlist modal. The Deep Dive is a closed beta: the Home card opens its
+  // passcode screen (which links here), everything else still opens the waitlist. Null = closed.
   // Open the waitlist on first load if arrived via the #waitlist deep link.
   const [waitlist, setWaitlist] = useState<WaitlistSource | null>(() =>
     isWaitlistHash() ? "link" : null,
@@ -84,6 +95,11 @@ export default function App() {
     setWaitlist(source);
   }
 
+  function startDeepDive() {
+    track("quiz_start", { tier: "deep-dive", resumed: false });
+    setScreen({ name: "deepdive" });
+  }
+
   function startTier(tier: TierId) {
     clearProgress(tier);
     track("quiz_start", { tier, resumed: false });
@@ -121,7 +137,12 @@ export default function App() {
   switch (screen.name) {
     case "home":
       screenEl = (
-        <Home onStart={startTier} onResume={resumeTier} onHome={goHome} onDeepDive={openWaitlist} />
+        <Home
+          onStart={startTier}
+          onResume={resumeTier}
+          onHome={goHome}
+          onStartDeepDive={startDeepDive}
+        />
       );
       break;
 
@@ -162,6 +183,10 @@ export default function App() {
           onDeepDive={openWaitlist}
         />
       );
+      break;
+
+    case "deepdive":
+      screenEl = <DeepDive onHome={goHome} onJoinWaitlist={() => openWaitlist("home-card")} />;
       break;
   }
 

@@ -41,12 +41,19 @@ export const RevealCarousel = memo(function RevealCarousel({
   muddy,
   onFocus,
   onLockedClick,
+  hint = "Select a spirit for more insight",
 }: {
   animals: CarouselAnimal[];
   tierScope: "speed" | "soul" | "deep";
   muddy: boolean;
   onFocus: (key: FocusKey) => void;
   onLockedClick?: () => void;
+  /**
+   * Prompt under the pills. `null` hides it — the Deep Dive passes null because both
+   * animals are already discussed in the reading, so the pills promise an "insight"
+   * they do not add. It only feeds locked-pill hover text, and Tier 3 locks nothing.
+   */
+  hint?: string | null;
 }) {
   const rootRef = useRef<HTMLDivElement>(null);
   const primary = animals[0];
@@ -64,7 +71,7 @@ export const RevealCarousel = memo(function RevealCarousel({
         unlockHint: a.unlockHint,
       })),
       text: Object.fromEntries(animals.map((a) => [a.key, { name: a.name, epithet: a.epithet }])),
-      baseHint: "Select a spirit for more insight",
+      baseHint: hint ?? "",
       onFocus,
       onLockedClick,
     });
@@ -120,7 +127,7 @@ export const RevealCarousel = memo(function RevealCarousel({
         ))}
       </div>
 
-      <div className="rc-hint rc-fade">Select a spirit for more insight</div>
+      {hint && <div className="rc-hint rc-fade">{hint}</div>}
     </div>
   );
 });

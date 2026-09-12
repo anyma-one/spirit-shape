@@ -1,12 +1,16 @@
 import { describe, expect, it } from "vitest";
-import { buildReveal } from "./reveal";
+import { buildDeepReveal, buildReveal } from "./reveal";
 import type { RevealItem } from "./reveal";
+import { MYTHOLOGY } from "./data/mythology";
 import { TIERS } from "./tiers";
 import type { Answers } from "./engine";
 
-function run(tier: "speed-run" | "soul-search") {
+function result(tier: "speed-run" | "soul-search") {
   const answers: Answers = Object.fromEntries(TIERS[tier].questions.map((q) => [q.id, "a"]));
-  return buildReveal(tier, TIERS[tier].run(answers));
+  return TIERS[tier].run(answers);
+}
+function run(tier: "speed-run" | "soul-search") {
+  return buildReveal(tier, result(tier));
 }
 const find = (items: RevealItem[], label: string) => items.find((i) => i.label === label)!;
 
@@ -44,5 +48,39 @@ describe("tiered reveal gate", () => {
     const r = run("soul-search");
     expect(r.mythologyParas).toHaveLength(2);
     expect(r.mythologyLocked.map((i) => i.label)).toEqual(["The complete myth"]);
+  });
+
+  describe("Deep Dive (rank 3)", () => {
+    it("reveals Element, Archetype AND Mythic role — nothing symbolic locked", () => {
+      const r = buildDeepReveal(result("soul-search"));
+      for (const label of ["Element", "Archetype", "Mythic role"]) {
+        const item = find(r.symbolic, label);
+        expect(item.value, `${label} should be revealed`).not.toBeNull();
+        expect(item.unlock).toBeNull();
+      }
+    });
+
+    it("reveals the full mythology (L1 + L2 + L3) and locks nothing", () => {
+      const r = buildDeepReveal(result("soul-search"));
+      expect(r.mythologyParas).toHaveLength(3);
+      expect(r.mythologyLocked).toEqual([]);
+      expect(r.mythologyDisclaimer).not.toBeNull();
+    });
+
+    it("renders L3 third, and never leaks it below rank 3", () => {
+      const res = result("soul-search");
+      const entry = MYTHOLOGY[res.primary.archetype.id];
+      expect(buildDeepReveal(res).mythologyParas).toEqual([entry.l1, entry.l2, entry.l3]);
+      // The lower tiers must not see it.
+      expect(buildReveal("soul-search", res).mythologyParas).toEqual([entry.l1, entry.l2]);
+      expect(buildReveal("speed-run", res).mythologyParas).toEqual([entry.l1]);
+    });
+
+    it("does not disturb the Tier 1-2 gate for the same result", () => {
+      const res = result("soul-search");
+      expect(buildReveal("soul-search", res)).toEqual(buildReveal("soul-search", res));
+      // The Soul Search view of the same result still hides the Tier 3 layer.
+      expect(find(buildReveal("soul-search", res).symbolic, "Mythic role").value).toBeNull();
+    });
   });
 });

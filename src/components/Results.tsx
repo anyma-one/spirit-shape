@@ -11,6 +11,8 @@ import { PROFILES } from "../data/profiles";
 import { buildCompletedResult, saveResult } from "../persistence/sessions";
 import { buildReveal } from "../reveal";
 import { RevealCarousel } from "./RevealCarousel";
+import { ShareCard } from "./ShareCard";
+import { buildCardContent } from "../share/content";
 import type { CarouselAnimal } from "./RevealCarousel";
 import type { FocusKey } from "./ui/revealCarousel";
 import { ConversionNudge, MedicalFooter } from "./Disclaimers";
@@ -248,6 +250,18 @@ export function Results({ tier, result, onRetake, onUnlock, onHome, onDeepDive }
             items={data[0].reveal.symbolic}
             onUnlock={onUnlock}
             onWaitlist={() => onDeepDive("locked")}
+          />
+
+          {/* Share card. Carries only the layers this tier has unlocked — buildCardContent
+              filters on the reveal model, so a Speed Run card cannot leak the Archetype. */}
+          <ShareCard
+            content={buildCardContent(
+              data[0].name,
+              data[0].epithet,
+              data[0].reveal,
+            )}
+            artUrl={data[0].art}
+            filenameBase={`anyma-${data[0].name.toLowerCase()}`}
           />
 
           {/* Conversion nudge (curiosity) toward the next tier — locked pills scroll here. */}

@@ -979,6 +979,13 @@ body,
   margin: 0;
   max-width: 18ch;
 }
+/* Secondary status line, used by the Deep Dive's indeterminate wait. */
+.loading-sub {
+  margin: var(--space-4) 0 0;
+  font-family: var(--font-sans);
+  font-size: var(--text-sm);
+  color: var(--cream-45);
+}
 @keyframes sa-kicker-breathe {
   0%,
   100% {
@@ -2228,4 +2235,647 @@ body.no-scroll {
   .legal {
     animation: none;
   }
+}
+
+/* ============================================================
+   Deep Dive (Tier 3) — conversational intake + parchment report
+   ============================================================ */
+
+/* --- intro --- */
+.dd-intro {
+  max-width: var(--width-prose);
+  margin: 0 auto;
+}
+/* Intro rhythm: more air under the headline, body sits closer to the closing
+   line. Scoped to .dd-intro so the shared landing hero spacing is untouched. */
+.dd-intro .landing__title {
+  margin-bottom: var(--space-7);
+}
+.dd-intro .landing__sub {
+  margin-bottom: 0;
+}
+.dd-intro__meta {
+  color: var(--cream-45);
+  font-size: var(--text-sm);
+  margin-top: var(--space-4);
+}
+/* Closing rhetorical line — matches the landing explainer's close treatment
+   ("Go deeper. Always."): light sans, wide tracking, uppercase, turquoise. */
+.dd-intro__question {
+  font-family: var(--font-sans);
+  font-weight: 300;
+  font-size: 14px;
+  letter-spacing: 0.34em;
+  text-transform: uppercase;
+  color: var(--turquoise);
+  margin: var(--space-6) 0 0;
+}
+/* Solid turquoise fill + glow on hover, matching the landing "Take the test" CTA. */
+.dd-intro__cta:hover:not(:disabled) {
+  background: var(--turquoise);
+  color: #fbf7ec;
+  border-color: var(--turquoise);
+  box-shadow: 0 0 28px rgba(79, 196, 196, 0.5), 0 0 10px rgba(79, 196, 196, 0.35);
+}
+.dd-intro__actions {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-4);
+  margin-top: var(--space-8);
+}
+.dd-intro__note {
+  margin-top: var(--space-8);
+}
+/* Closed-beta passcode gate (reuses the waitlist input). */
+.dd-gate__form {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-4);
+  width: 100%;
+  max-width: 22rem;
+  margin: var(--space-8) auto 0;
+}
+.dd-gate__form .waitlist__error {
+  text-align: center;
+}
+.dd-gate .dd-intro__actions {
+  margin-top: var(--space-5);
+}
+.dd-textlink {
+  background: none;
+  border: 0;
+  color: var(--turquoise);
+  font-family: var(--font-sans);
+  font-size: var(--text-sm);
+  cursor: pointer;
+  padding: var(--space-2);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+.dd-textlink:hover {
+  color: var(--cream);
+}
+
+/* --- interview chat --- */
+.dd-chat {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  max-width: var(--width-prose);
+  margin: 0 auto;
+  flex: 1 1 auto;
+  min-height: 0;
+}
+.dd-chat__scroll {
+  flex: 1 1 auto;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-8);
+  padding: var(--space-6) var(--space-2) var(--space-7);
+}
+/* The interview is a conversation, not a message thread. The interviewer is a VOICE:
+   display serif, unboxed, straight on the night sky. The reader's answers are the thing
+   they made, so they keep a container — which also carries the who-said-what cue that
+   typography alone was doing. Nothing is right-aligned; this reads as a transcript.
+   (Both sides were bubbles until 2026-07-27; see HANDOVER §11.1c.) */
+.dd-msg {
+  max-width: 34rem;
+  align-self: flex-start;
+  line-height: var(--leading-relaxed);
+  white-space: pre-wrap;
+}
+.dd-msg--assistant {
+  font-family: var(--font-display);
+  font-size: var(--text-heading);
+  line-height: var(--leading-normal);
+  color: var(--cream);
+}
+/* Centred, with an even radius on all four corners. A tail on any one corner implied
+   a direction the layout does not have — the interviewer is unboxed, so there is no
+   opposite side for the bubble to point away from. */
+.dd-msg--user {
+  align-self: center;
+  margin-left: 0;
+  padding: var(--space-4) var(--space-5);
+  background: var(--turquoise-16);
+  border: 1px solid var(--turquoise-32);
+  border-radius: var(--radius-md);
+  font-family: var(--font-sans);
+  font-size: var(--text-base);
+  color: var(--cream);
+}
+.dd-msg--typing {
+  font-family: var(--font-sans);
+  font-size: var(--text-lg);
+  color: var(--cream-45);
+  letter-spacing: 0.2em;
+}
+
+.dd-error {
+  align-self: center;
+  color: var(--cream-70);
+  font-size: var(--text-sm);
+}
+
+/* ⚠️ Required for the sticky compose bar below. `.app` is `overflow: hidden` (§8), which
+   makes it the scroll container for any sticky descendant — and since `.app` itself never
+   scrolls (the WINDOW does), `position: sticky` silently does nothing inside it. Measured:
+   the bar moved 1:1 with the page.
+   `overflow-x: clip` clips exactly like `hidden` but does NOT create a scroll container,
+   so sticky resolves against the window instead. Scoped with :has() to the chat screen so
+   no other view's clipping behaviour changes. Do not "simplify" this back to `hidden`. */
+.app:has(.dd-chat) {
+  overflow-x: clip;
+  overflow-y: visible;
+}
+
+/* Sticky so the input is always reachable. `.app` is min-height:100% and grows with
+   content, so `.dd-chat__scroll`'s overflow never engaged and the compose box was
+   pushed further below the fold with every turn (at 1280x720 and five messages it sat
+   ~270px past the viewport, and the auto-scroll effect was a no-op). Sticky fixes that
+   without bounding the app height, which would push the footer — and with it the
+   § 5 DDG imprint link — off this screen. At the very bottom the bar releases and sits
+   above the footer, so the legal links stay clickable. */
+.dd-compose {
+  position: sticky;
+  bottom: 0;
+  z-index: 2;
+  /* Translucent + blurred rather than a solid slab: a hard-edged block of --void
+     sitting on the starfield reads as a patch. This lets the sky through and blurs
+     the transcript sliding underneath. */
+  background: color-mix(in srgb, var(--void) 78%, transparent);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+  border-top: 1px solid var(--cream-12);
+  padding: var(--space-4) var(--space-2) var(--space-6);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+/* Fade the transcript out into the bar rather than letting text collide with its
+   top edge. Full-bleed so the fade has no vertical seam against the sky. */
+.dd-compose::before {
+  content: "";
+  position: absolute;
+  inset: auto 0 100% 0;
+  margin-inline: calc(50% - 50vw);
+  height: var(--space-8);
+  background: linear-gradient(to bottom, transparent, var(--void));
+  pointer-events: none;
+}
+/* Extend the bar's own surface to the viewport edges, under the same blur, so the
+   column-width panel does not read as a floating rectangle. */
+.dd-compose::after {
+  content: "";
+  position: absolute;
+  inset: -1px 0 0 0;
+  margin-inline: calc(50% - 50vw);
+  z-index: -1;
+  background: inherit;
+  backdrop-filter: inherit;
+  border-top: 1px solid var(--cream-12);
+  pointer-events: none;
+}
+.dd-compose__input {
+  width: 100%;
+  resize: vertical;
+  background: var(--surface-raised);
+  color: var(--cream);
+  border: 1px solid var(--cream-12);
+  border-radius: var(--radius-sm);
+  padding: var(--space-4);
+  font-family: var(--font-sans);
+  font-size: var(--text-base);
+  line-height: var(--leading-normal);
+}
+.dd-compose__input:focus-visible {
+  outline: none;
+  border-color: var(--turquoise);
+  box-shadow: 0 0 0 3px var(--turquoise-32);
+}
+.dd-compose__row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-4);
+}
+.dd-compose__hint {
+  color: var(--cream-45);
+  font-size: var(--text-xs);
+}
+
+/* AI-processing notice under the compose box. Deliberately quiet: present at the point
+   of collection without competing with the question the reader is answering. */
+.dd-compose__notice {
+  margin-top: var(--space-3);
+  /* Fainter than the compose hint: present and readable, but never competing with
+     the question the reader is answering. */
+  color: var(--cream-30);
+  font-family: var(--font-sans);
+  font-size: 11px;
+  line-height: 1.7;
+}
+.dd-compose__notice a,
+.dd-intro__note a {
+  color: inherit;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  transition: color var(--dur-fast) var(--ease-out);
+}
+.dd-compose__notice a:hover,
+.dd-intro__note a:hover {
+  color: var(--cream);
+}
+
+/* --- processing --- */
+.dd-processing {
+  text-align: center;
+}
+/* NB: .dd-processing now styles the ERROR stage only — the processing stage uses
+   the shared Loading particle screen (see DeepDive.tsx). */
+.dd-processing__step {
+  font-family: var(--font-display);
+  font-size: var(--text-title);
+  color: var(--cream);
+}
+.dd-processing__sub {
+  color: var(--cream-45);
+  font-size: var(--text-sm);
+  margin-top: var(--space-3);
+}
+
+/* --- report (parchment) --- */
+/* The Tier-3 reading, as a parchment "letter" inset into the night-sky result
+   page: the payoff keeps its own surface, while the furniture around it (carousel,
+   mythology, symbolic echoes) matches Tiers 1-2. Set explicitly rather than via
+   .sa-parchment, which .panel would otherwise override on source order. */
+/* Air between the carousel and the first panel on the Tier-3 result. The pills sat
+   almost flush against "The short version", which made the reveal and the reading
+   read as one block. Scoped to the Deep Dive so Tiers 1-2 keep their spacing. */
+.dd-reveal-body {
+  margin-top: var(--space-8);
+}
+
+/* --- share card ------------------------------------------------------------
+   Rendered client-side to a PNG; nothing is uploaded or hosted (share/renderCard.ts). */
+.share {
+  text-align: center;
+  padding: var(--space-6) 0 var(--space-2);
+}
+/* Turquoise fill — the app's interactive voice, so the one action on the result page
+   reads as an action. Overrides btn--tier's mood colour, and re-states the glow and
+   hover in turquoise so they do not fall back to --tier. */
+.share__cta.btn--tier {
+  background: var(--turquoise);
+  color: var(--void);
+}
+.share__cta.btn--tier.btn--glow {
+  box-shadow: 0 0 20px 2px var(--turquoise-32), 0 0 48px 10px var(--turquoise-16);
+}
+.share__cta.btn--tier:hover:not(:disabled) {
+  box-shadow: 0 0 24px 3px color-mix(in oklab, var(--turquoise) 52%, transparent),
+    0 0 52px 12px var(--turquoise-32);
+}
+
+/* The picker modal. Shares the waitlist modal's chrome (backdrop, close button,
+   eyebrow) so there is one modal language in the app, but a wider panel because it
+   has to show two real card previews side by side. */
+.sharem {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: var(--space-6);
+}
+.sharem__backdrop {
+  position: absolute;
+  inset: 0;
+  background: var(--void-80);
+  backdrop-filter: blur(4px);
+  animation: waitlist-fade var(--dur-base) var(--ease-soft);
+}
+.sharem__panel {
+  position: relative;
+  width: min(620px, 100%);
+  max-height: 100%;
+  overflow-y: auto;
+  background: var(--indigo);
+  border: 1px solid var(--border-hairline);
+  border-radius: var(--radius-lg);
+  padding: var(--space-8) var(--space-7) var(--space-7);
+  box-shadow: 0 24px 80px rgba(0, 0, 0, 0.5),
+    0 0 60px color-mix(in oklab, var(--tier) 18%, transparent);
+  animation: waitlist-rise var(--dur-base) var(--ease-out);
+  text-align: center;
+}
+.sharem__title {
+  font-family: var(--font-display);
+  font-size: 1.9rem;
+  line-height: 1.15;
+  color: var(--cream);
+  margin: 0;
+}
+/* Subline under the headline, in the accent voice — the same role the section
+   labels play elsewhere, so the modal reads in the app's typographic language. */
+.sharem__lede {
+  margin: var(--space-3) 0 var(--space-7);
+  font-family: var(--font-sans);
+  font-size: var(--text-xs);
+  text-transform: uppercase;
+  letter-spacing: var(--tracking-label);
+  color: var(--accent);
+}
+.sharem__grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--space-5);
+  align-items: end;
+}
+.sharem__option {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-3);
+  background: none;
+  border: 1px solid transparent;
+  border-radius: var(--radius-md);
+  cursor: pointer;
+  transition: border-color var(--dur-fast) var(--ease-out),
+    transform var(--dur-fast) var(--ease-out);
+}
+.sharem__option:hover:not(:disabled),
+.sharem__option:focus-visible {
+  border-color: var(--accent);
+  transform: translateY(-2px);
+  /* The stroke itself glows, so the hovered card lifts off the panel rather than
+     just gaining an outline. */
+  box-shadow: 0 0 18px 1px var(--turquoise-32), 0 0 44px 8px var(--turquoise-16);
+}
+.sharem__option:disabled {
+  cursor: progress;
+}
+/* Fixed aspect box so the two previews reserve their space before the PNGs are
+   drawn — otherwise the modal jumps as each finishes rendering.
+   Sized by HEIGHT, with width derived from aspect-ratio: driving it by width and
+   capping with max-height let the box grow wider than 9:16, so the story preview sat
+   letterboxed inside its own frame. Equal heights also make the two formats directly
+   comparable, which is the point of showing them side by side. */
+.sharem__frame {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: min(38vh, 300px);
+  width: auto;
+  max-width: 100%;
+  background: var(--void);
+  border: 1px solid var(--border-hairline);
+  border-radius: var(--radius-sm);
+  overflow: hidden;
+}
+.sharem__img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  display: block;
+}
+.sharem__pending {
+  font-family: var(--font-sans);
+  font-size: var(--text-xs);
+  color: var(--cream-45);
+}
+.sharem__label {
+  font-family: var(--font-sans);
+  font-size: var(--text-sm);
+  color: var(--cream);
+}
+.sharem__note {
+  font-family: var(--font-sans);
+  font-size: var(--text-xs);
+  color: var(--cream-45);
+}
+.sharem__status {
+  min-height: 1.4em;
+  margin: var(--space-5) 0 0;
+  font-family: var(--font-sans);
+  font-size: var(--text-xs);
+  color: var(--cream-45);
+}
+@media (max-width: 560px) {
+  .sharem__grid {
+    grid-template-columns: 1fr 1fr;
+    gap: var(--space-3);
+  }
+  .sharem__frame {
+    height: min(30vh, 220px);
+  }
+}
+
+/* --- collapsible rows (Tier-3 result page) ---------------------------------
+   Hairline dividers rather than cards: a stack of nine bordered boxes reads as a
+   settings screen, which is the wrong note for the payoff of a 45-minute interview. */
+.disclose + .disclose {
+  border-top: 1px solid var(--border-hairline);
+}
+.disclose__title {
+  margin: 0;
+  font: inherit;
+}
+.disclose__btn {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-4);
+  width: 100%;
+  padding: var(--space-4) 0;
+  background: none;
+  border: 0;
+  cursor: pointer;
+  text-align: left;
+  color: var(--cream);
+  font-family: var(--font-display);
+  font-size: var(--text-lg);
+  line-height: var(--leading-tight);
+  transition: color var(--dur-fast) var(--ease-out);
+}
+.disclose__btn:hover .disclose__label {
+  opacity: 0.75;
+}
+/* A plus that becomes a minus. Cheaper to read at a glance than a rotating chevron.
+   Carries the turquoise accent — the app's interactive voice — so the one affordance
+   on an otherwise still page reads as clickable. */
+.disclose__mark {
+  position: relative;
+  flex: none;
+  width: 14px;
+  height: 14px;
+  color: var(--accent);
+  transition: opacity var(--dur-fast) var(--ease-out);
+}
+.disclose__btn:hover .disclose__mark {
+  opacity: 0.7;
+}
+.disclose__mark::before,
+.disclose__mark::after {
+  content: "";
+  position: absolute;
+  inset: 50% 0 auto 0;
+  height: 1px;
+  background: currentColor;
+  transition: transform var(--dur-fast) var(--ease-out);
+}
+.disclose__mark::after {
+  transform: rotate(90deg);
+}
+.disclose.is-open .disclose__mark::after {
+  transform: rotate(0deg);
+}
+.disclose__panel {
+  padding-bottom: var(--space-5);
+  animation: disclose-in 220ms var(--ease-out) both;
+}
+.disclose__panel > *:first-child {
+  margin-top: 0;
+}
+@keyframes disclose-in {
+  from { opacity: 0; transform: translateY(-4px); }
+  to   { opacity: 1; transform: none; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .disclose__panel { animation: none; }
+  .disclose__mark::before,
+  .disclose__mark::after { transition: none; }
+}
+
+/* The promoted distillation: no rows, because it is the one thing meant to be read
+   without a decision. Real output emits its three or four lines as SEPARATE
+   paragraphs (blank-line separated), not as one block of <br>s, so the paragraph
+   gap is tightened here — at the standard --space-5 the four lines drift apart and
+   stop reading as a single distillation. */
+.dd-short .dd-report__body {
+  margin-top: var(--space-4);
+}
+.dd-short .dd-report__p {
+  font-size: var(--text-lg);
+  line-height: var(--leading-normal);
+  margin-bottom: var(--space-3);
+}
+.dd-short .dd-report__p:last-child {
+  margin-bottom: 0;
+}
+
+/* The reading sits on the same night panel as the origin and symbolic boxes, so the
+   result page reads as one set of surfaces rather than a parchment insert. (It was
+   parchment until 2026-07-27; `.sa-parchment` in tokens.css still holds that surface
+   if it is ever wanted back.) */
+.dd-report__body {
+  max-width: var(--width-reading);
+  margin: var(--space-5) auto 0;
+  color: var(--cream-70);
+}
+/* Fallback head (only when the decided animal has no shared-library entry), so it
+   sits on the night sky rather than parchment. */
+.dd-report__head {
+  text-align: center;
+  margin-bottom: var(--space-8);
+}
+.dd-report__eyebrow {
+  display: block;
+  text-transform: uppercase;
+  letter-spacing: var(--tracking-wide, 0.14em);
+  font-family: var(--font-sans);
+  font-size: var(--text-xs);
+  color: var(--cream-45);
+}
+.dd-report__animal {
+  font-family: var(--font-display);
+  font-size: var(--text-display);
+  color: var(--cream);
+  margin: var(--space-2) 0;
+}
+.dd-report__p {
+  margin: 0 0 var(--space-5);
+}
+/* Section headings the report model emits as `## ...` — display serif, sitting a
+   step below the animal name. Only reachable while the report is streaming; once it
+   closes, the headings become the collapsible row labels instead. */
+.dd-report__h {
+  font-family: var(--font-display);
+  font-weight: 600;
+  font-size: var(--text-heading);
+  line-height: 1.2;
+  color: var(--cream);
+  margin: var(--space-8) 0 var(--space-4);
+}
+.dd-report__h:first-of-type {
+  margin-top: 0;
+}
+/* Emphasis — the one load-bearing sentence per section (report EMPHASIS rule).
+   Lifts to full cream against the --cream-70 body, as bold ink did on parchment. */
+.dd-report__body strong {
+  font-weight: 700;
+  color: var(--cream);
+}
+.dd-report__cursor {
+  color: var(--cream-45);
+  animation: dd-blink 1s steps(2) infinite;
+}
+@keyframes dd-blink {
+  50% { opacity: 0; }
+}
+/* Footer sits on the night sky (outside the parchment reading), so it takes the
+   cream palette the other tiers' result footers use. */
+.dd-report__foot {
+  width: 100%;
+  max-width: var(--width-reading);
+  margin: var(--space-9) auto 0;
+  padding-top: var(--space-7);
+  border-top: 1px solid var(--border-hairline);
+}
+.dd-reaction {
+  text-align: center;
+  margin-bottom: var(--space-7);
+}
+.dd-reaction__q {
+  font-family: var(--font-sans);
+  font-size: var(--text-base);
+  color: var(--cream);
+  margin-bottom: var(--space-4);
+}
+.dd-reaction__scale {
+  display: inline-flex;
+  gap: var(--space-3);
+}
+.dd-reaction__dot {
+  width: 44px;
+  height: 44px;
+  border-radius: var(--radius-pill);
+  border: 1px solid var(--border-hairline);
+  background: transparent;
+  color: var(--cream);
+  font-family: var(--font-sans);
+  font-size: var(--text-base);
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s;
+}
+.dd-reaction__dot:hover {
+  background: var(--surface-raised);
+  border-color: var(--cream-45);
+}
+.dd-reaction__thanks {
+  color: var(--cream-45);
+  font-style: italic;
+}
+.dd-report__disclaimer {
+  font-family: var(--font-sans);
+  font-size: var(--text-xs);
+  color: var(--cream-45);
+  line-height: var(--leading-normal);
+  margin-bottom: var(--space-6);
+  text-align: center;
 }

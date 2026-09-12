@@ -1,0 +1,856 @@
+import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Layout } from "./ui/Layout";
+import { Loading } from "./Loading";
+import { parseReport, type Block, type Segment } from "../deepdive/reportFormat";
+import { structureReport } from "../deepdive/reportSections";
+import { Disclosure } from "./ui/Disclosure";
+import { ShareCard } from "./ShareCard";
+import { buildCardContent } from "../share/content";
+import { Button } from "./ui/Button";
+import { ANIMAL_BY_ID } from "../data/archetypes";
+import { animalArtUrl } from "../data/animalArt";
+import { PROFILES } from "../data/profiles";
+import { buildDeepReveal } from "../reveal";
+import { toMatchResult } from "../deepdive/matchResult";
+import type { Match, MatchResult } from "../engine";
+import { RevealCarousel, type CarouselAnimal } from "./RevealCarousel";
+import type { FocusKey } from "./ui/revealCarousel";
+import { SymbolicProfile } from "./SymbolicProfile";
+import {
+  buildRunLog,
+  buildTranscript,
+  extract,
+  isInterviewComplete,
+  logReaction,
+  logRun,
+  nominate,
+  streamInterviewTurn,
+  streamReport,
+  stripTranscriptBlock,
+  synthesize,
+  type AnimalRef,
+  type ChatTurn,
+  type Decision,
+  type ExtractedProfile,
+} from "../deepdive/pipeline";
+import {
+  clearSession,
+  loadSession,
+  newRunId,
+  saveSession,
+} from "../deepdive/session";
+import {
+  AccessDeniedError,
+  clearPasscode,
+  loadPasscode,
+  savePasscode,
+  verifyPasscode,
+} from "../deepdive/access";
+
+// "locked" = the closed-beta passcode screen, shown before the intro until a valid
+// code is stored on this device (see deepdive/access.ts).
+type Stage = "locked" | "intro" | "interview" | "processing" | "report" | "error";
+
+function animalRef(id: string): AnimalRef | undefined {
+  const a = ANIMAL_BY_ID[id];
+  return a ? { id: a.id, name: a.name, note: a.note } : undefined;
+}
+
+// Render parsed report segments, wrapping the emphasised ones in <strong>.
+function renderSegments(segments: Segment[]) {
+  return segments.map((s, i) =>
+    s.bold ? <strong key={i}>{s.text}</strong> : <Fragment key={i}>{s.text}</Fragment>,
+  );
+}
+
+// Deep Dive (Tier 3) — the live conversational tier. Manages the whole flow in
+// one screen: intro -> adaptive interview (streamed) -> extract/nominate/synthesize
+// -> streamed report on the parchment surface -> one-tap reaction.
+export function DeepDive({
+  onHome,
+  onJoinWaitlist,
+}: {
+  onHome: () => void;
+  onJoinWaitlist: () => void;
+}) {
+  // A stored code skips the gate; the server re-checks it on every call, and a
+  // rejection (code rotated) sends the reader back here via lockOut().
+  const [stage, setStage] = useState<Stage>(() => (loadPasscode() ? "intro" : "locked"));
+  const [passcode, setPasscode] = useState("");
+  const [unlocking, setUnlocking] = useState(false);
+  const [lockMessage, setLockMessage] = useState("");
+  const [runId, setRunId] = useState<string>("");
+  const [messages, setMessages] = useState<ChatTurn[]>([]);
+  const [streaming, setStreaming] = useState<string>(""); // in-flight interviewer turn
+  const [input, setInput] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string>("");
+
+  const [processingStep, setProcessingStep] = useState("Reading your answers");
+  const [decision, setDecision] = useState<Decision | null>(null);
+  // The Tier-3 output in MatchResult shape, so the result screen can use the same
+  // furniture as Tiers 1-2. Null if the decided animals aren't in the shared
+  // library — the screen then falls back to the reading alone.
+  const [matchResult, setMatchResult] = useState<MatchResult | null>(null);
+  const [focus, setFocus] = useState<FocusKey>("primary");
+  const [report, setReport] = useState("");
+  const [reportDone, setReportDone] = useState(false);
+  const [reaction, setReaction] = useState<number | null>(null);
+
+  const scrollRef = useRef<HTMLDivElement>(null);
+  const startedRef = useRef(false);
+
+  // The live pipeline step, as the loading screen's single (re-fading) status line.
+  const processingLines = useMemo(() => [`${processingStep}…`], [processingStep]);
+
+  // --- result furniture -------------------------------------------------------
+  // Tier 3 renders through the same components as Tiers 1-2. These are memoised
+  // (and the focus handler is stable) so the streaming report's re-renders never
+  // remount RevealCarousel and interrupt its intro animation.
+  const handleFocus = useCallback((key: FocusKey) => setFocus(key), []);
+
+  const deepData = useMemo(() => {
+    if (!matchResult) return null;
+    const mk = (match: Match, key: FocusKey) => ({
+      key,
+      name: match.archetype.name,
+      epithet: PROFILES[match.archetype.id]?.epithet ?? "",
+      art: animalArtUrl(match.archetype.name) ?? "",
+      // Mythology follows the focused animal (as in Results); the symbolic layer
+      // is vector-based and stays put.
+      reveal: buildDeepReveal({ ...matchResult, primary: match }),
+    });
+    return [mk(matchResult.primary, "primary" as FocusKey), mk(matchResult.secondary, "secondary" as FocusKey)];
+  }, [matchResult]);
+
+  const carouselAnimals: CarouselAnimal[] = useMemo(
+    () =>
+      (deepData ?? []).map((a) => ({
+        key: a.key,
+        // "Second nature", not "Nearly": the runner-up is a real part of the reader,
+        // not a near-miss. The report prompt's STRUCTURE block is worded to match.
+        rankLabel: a.key === "primary" ? "Your core shape" : "Second nature",
+        name: a.name,
+        epithet: a.epithet,
+        // No percentage on purpose: the Tier-3 winner is reasoned by synthesis,
+        // not scored, so a cosine split could contradict it (see matchResult.ts).
+        pct: undefined,
+        art: a.art,
+        tint: a.key === "primary" ? "var(--tier)" : "#cbe3ff",
+        // Top of the funnel — both animals are fully open, nothing to unlock.
+        open: true,
+        softLock: false,
+        unlockHint: "",
+      })),
+    [deepData],
+  );
+
+  // No locked layers exist at Tier 3, so the unlock CTAs are never reachable.
+  const noUnlock = useCallback(() => {}, []);
+
+  // Resume a saved interview if one exists (offered on the intro screen).
+  const [resumable] = useState(() => loadSession());
+
+  // --- DEV ONLY: render Tier-3 screens without spending an interview ----------
+  //   #deep-preview       the result screen, seeded from a fixed profile
+  //   #deep-preview-chat  the interview screen, seeded with a canned exchange
+  // Costs no API calls. `import.meta.env.DEV` is statically false in a production
+  // build, so Rollup drops both blocks from the shipped bundle (verified: none of
+  // the sample text appears in dist/). Safe to delete outright.
+  useEffect(() => {
+    if (!import.meta.env.DEV) return;
+    if (window.location.hash !== "#deep-preview-chat") return;
+    // A mid-interview moment rather than the first question: long assistant turns,
+    // a short user reply and a long one, so the styling is judged on the shapes it
+    // actually has to hold.
+    setMessages([
+      {
+        role: "assistant",
+        content:
+          "Let's start here.\n\nTell me about something you made or finished — and what you did with it once it was done.\n\n(doesn't have to be big — a meal, a repair, a piece of writing, a plan that came together, at work or at home)",
+      },
+      {
+        role: "user",
+        content:
+          "I rebuilt the hosting setup for a side project last month. It had been broken for a while and I kept putting it off. Once it worked I didn't really tell anyone, I just mentioned it to two friends as a complaint about how long it took.",
+      },
+      {
+        role: "assistant",
+        content:
+          "You mentioned it as a complaint rather than as a thing you'd done.\n\nWhat would it have cost you to say it plainly — that you fixed something hard?",
+      },
+      { role: "user", content: "Honestly I'd have felt like I was asking for something." },
+      {
+        role: "assistant",
+        content:
+          "That's worth sitting with. Asking for what, do you think — attention, or permission to be pleased with it?",
+      },
+    ]);
+    setRunId("preview");
+    setStage("interview");
+  }, []);
+
+  useEffect(() => {
+    if (!import.meta.env.DEV) return;
+    if (window.location.hash !== "#deep-preview") return;
+    const axes = [
+      { code: "SOC", score: -2, evidence: "kept to herself", confidence: "high" },
+      { code: "TMP", score: -1, evidence: "waited it out", confidence: "high" },
+      { code: "COG", score: -2, evidence: "worked it through step by step", confidence: "high" },
+      { code: "BND", score: 1, evidence: "held the line", confidence: "medium" },
+      { code: "AUT", score: -1, evidence: "let it go", confidence: "medium" },
+      { code: "REC", score: -2, evidence: "never mentioned it", confidence: "high" },
+      { code: "NOV", score: -1, evidence: "same route every time", confidence: "medium" },
+      { code: "EXP", score: 1, evidence: "writes most evenings", confidence: "medium" },
+    ] as ExtractedProfile["axes"];
+    const n = nominate(axes);
+    if (!n.ok) return;
+    const mockDecision: Decision = {
+      winner_id: "owl",
+      runnerup_id: "tortoise",
+      distinction: "",
+      comparison_notes: "",
+      decided_on_low_confidence: false,
+    };
+    setDecision(mockDecision);
+    setMatchResult(toMatchResult(axes, n.ranked, mockDecision));
+    // Mirrors the real report's shape (four parts, a short distillation, three
+    // questions) with model-chosen headings, so the preview exercises the row
+    // grouping and the distillation promotion rather than a simplified stand-in.
+    const filler = (n: number) => "Sample text for layout only. ".repeat(n).trim();
+    setReport(
+      [
+        "## The shape you keep making",
+        `You described the same move three times without noticing: you go quiet, you watch, and you come back with the thing nobody else had put together. **That is the Owl, and it is your evidence, not the Owl's reputation.** ${filler(10)}`,
+        filler(12),
+        "## The self you carry",
+        `${filler(6)} **You experience yourself defending your attention; they experience someone who reliably gives in.** ${filler(8)}`,
+        "## Where it costs you",
+        `${filler(5)} **You will not resolve this by deciding which one is the honest you.** ${filler(9)}`,
+        "## What you have not noticed",
+        `${filler(7)} **Growth is a claim that can never be checked.** ${filler(7)}`,
+        "## In short",
+        "You think before you move.\nYou wait longer than the moment allows.\nYou are not as easy-going as you tell people.",
+        "## Three questions to sit with",
+        "When did you last say the thing at the time?\nWho has seen you angry?\nWhat are you actually waiting for?",
+      ].join("\n\n"),
+    );
+    setReportDone(true);
+    setStage("report");
+  }, []);
+
+  // Every stage of the Deep Dive starts at the top of the page — otherwise the
+  // scroll position carries over from wherever the reader was (e.g. deep down the
+  // landing page when they picked the tier) and the new screen opens mid-way.
+  // Scroll the WINDOW, never scrollIntoView: `.app` is overflow:hidden, so
+  // scrollIntoView scrolls it internally and shoves the header off-screen.
+  useEffect(() => {
+    window.scrollTo(0, 0);
+    // `.app` is technically scrollable too; reset it so the header stays put.
+    document.querySelector<HTMLElement>(".app")?.scrollTo(0, 0);
+  }, [stage]);
+
+  // Keep the transcript scrolled to the latest turn.
+  useEffect(() => {
+    scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight });
+  }, [messages, streaming]);
+
+  // The server rejected the stored code (e.g. it was rotated). Forget it and return
+  // to the gate. The interview transcript stays saved, so it resumes after unlock.
+  function lockOut() {
+    clearPasscode();
+    setStreaming("");
+    setError("");
+    setLockMessage("Your access code has changed. Please enter the new one to continue.");
+    setStage("locked");
+  }
+
+  async function unlock() {
+    const code = passcode.trim();
+    if (!code || unlocking) return;
+    setUnlocking(true);
+    setLockMessage("");
+    const outcome = await verifyPasscode(code);
+    setUnlocking(false);
+    if (outcome === "ok") {
+      savePasscode(code);
+      setPasscode("");
+      setStage("intro");
+    } else if (outcome === "wrong") {
+      setLockMessage("That code didn't work. Check it and try again.");
+    } else if (outcome === "closed") {
+      setLockMessage("The Deep Dive isn't open yet.");
+    } else {
+      setLockMessage("Couldn't check the code just now. Please try again.");
+    }
+  }
+
+  function persist(next: ChatTurn[], id: string) {
+    saveSession({ runId: id, messages: next, createdAt: new Date().toISOString() });
+  }
+
+  // --- interview -------------------------------------------------------------
+
+  async function runInterviewTurn(history: ChatTurn[], id: string) {
+    setBusy(true);
+    setError("");
+    setStreaming("");
+    try {
+      let acc = "";
+      const full = await streamInterviewTurn(history, (delta) => {
+        acc += delta;
+        setStreaming(acc);
+      });
+      const assistantTurn: ChatTurn = { role: "assistant", content: full };
+      const next = [...history, assistantTurn];
+      setMessages(next);
+      setStreaming("");
+      persist(next, id);
+      if (isInterviewComplete(full)) {
+        void finishInterview(next, id);
+      }
+    } catch (err) {
+      if (err instanceof AccessDeniedError) return lockOut();
+      setError(err instanceof Error ? err.message : "The interview hit a snag.");
+      setStreaming("");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  function beginInterview(resume: boolean) {
+    const session = resume ? resumable : null;
+    const id = session?.runId ?? newRunId();
+    setRunId(id);
+    setStage("interview");
+    if (session && session.messages.length > 0) {
+      setMessages(session.messages);
+      const last = session.messages[session.messages.length - 1];
+      if (last.role === "assistant" && isInterviewComplete(last.content)) {
+        // The interviewer had already closed — jump straight to the reading.
+        void finishInterview(session.messages, id);
+      } else if (last.role === "user") {
+        // Their answer was saved but the interviewer's reply never arrived (e.g.
+        // the connection dropped mid-turn). Ask for it now, or the resumed
+        // interview would sit there with no next question and no way forward.
+        void runInterviewTurn(session.messages, id);
+      }
+    } else {
+      void runInterviewTurn([], id);
+    }
+  }
+
+  function submitAnswer() {
+    const text = input.trim();
+    if (!text || busy) return;
+    const next: ChatTurn[] = [...messages, { role: "user", content: text }];
+    setMessages(next);
+    setInput("");
+    persist(next, runId);
+    void runInterviewTurn(next, runId);
+  }
+
+  // --- processing (extract -> nominate -> synthesize -> report) --------------
+
+  async function finishInterview(finalMessages: ChatTurn[], id: string) {
+    setStage("processing");
+    setBusy(true);
+    try {
+      const transcript = buildTranscript(finalMessages);
+
+      setProcessingStep("Reading your answers");
+      const profile: ExtractedProfile = await extract(transcript);
+
+      setProcessingStep("Finding your shape");
+      const nomination = nominate(profile.axes);
+      if (!nomination.ok) {
+        setError(
+          "The interview didn't produce a clear enough direction to read. This usually means the answers stayed general — try again and answer with specific stories.",
+        );
+        setStage("error");
+        return;
+      }
+
+      setProcessingStep("Deciding");
+      const dec = await synthesize(profile.axes, profile.gaps, nomination.candidates);
+      setDecision(dec);
+      setMatchResult(toMatchResult(profile.axes, nomination.ranked, dec));
+
+      // Beta log (derived vector + ranking only; fire-and-forget).
+      logRun(buildRunLog(id, new Date().toISOString(), profile.axes, nomination.ranked, dec));
+
+      // Stream the report.
+      setStage("report");
+      setBusy(false);
+      setProcessingStep("Writing your reading");
+      await streamReport(
+        {
+          transcript,
+          axes: profile.axes,
+          gaps: profile.gaps,
+          aspiration: profile.aspiration,
+          decision: dec,
+          winner: animalRef(dec.winner_id),
+          runnerUp: animalRef(dec.runnerup_id),
+        },
+        (delta) => setReport((r) => r + delta),
+      );
+      setReportDone(true);
+      clearSession(); // the run is complete; don't offer to resume it
+    } catch (err) {
+      if (err instanceof AccessDeniedError) return lockOut();
+      setError(err instanceof Error ? err.message : "Something went wrong generating your reading.");
+      setStage("error");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  function chooseReaction(n: number) {
+    if (reaction !== null) return;
+    setReaction(n);
+    if (runId) logReaction(runId, n);
+  }
+
+  function restart() {
+    clearSession();
+    setMessages([]);
+    setStreaming("");
+    setInput("");
+    setError("");
+    setDecision(null);
+    setMatchResult(null);
+    setFocus("primary");
+    setReport("");
+    setReportDone(false);
+    setReaction(null);
+    startedRef.current = false;
+    setStage("intro");
+  }
+
+  // ---------------------------------------------------------------------------
+
+  if (stage === "locked") {
+    return (
+      <Layout header={{ tier: "deep", onHome }}>
+        <main className="view view--center dd-intro dd-gate">
+          <span className="kicker">Deep Dive · Closed beta</span>
+          <h1 className="landing__title">The Deep End</h1>
+          <p className="landing__sub">
+            The Deep Dive is open to beta testers for now. Enter your access code to begin.
+          </p>
+          <form
+            className="dd-gate__form"
+            onSubmit={(e) => {
+              e.preventDefault();
+              void unlock();
+            }}
+          >
+            <input
+              type="password"
+              className="waitlist__input"
+              placeholder="Access code"
+              value={passcode}
+              onChange={(e) => setPasscode(e.target.value)}
+              autoComplete="off"
+              autoCapitalize="off"
+              autoCorrect="off"
+              spellCheck={false}
+              aria-label="Access code"
+              aria-invalid={lockMessage ? true : undefined}
+              disabled={unlocking}
+            />
+            {lockMessage && (
+              <p className="waitlist__error" role="alert">
+                {lockMessage}
+              </p>
+            )}
+            <Button
+              type="submit"
+              variant="luminous"
+              size="lg"
+              caps
+              glow
+              className="dd-intro__cta"
+              disabled={unlocking || !passcode.trim()}
+            >
+              {unlocking ? "Checking…" : "Unlock"}
+            </Button>
+          </form>
+          <div className="dd-intro__actions">
+            <button type="button" className="dd-textlink" onClick={onJoinWaitlist}>
+              No code? Join the waitlist
+            </button>
+          </div>
+        </main>
+      </Layout>
+    );
+  }
+
+  if (stage === "intro") {
+    return (
+      <Layout header={{ tier: "deep", onHome }}>
+        <main className="view view--center dd-intro">
+          <span className="kicker">Deep Dive</span>
+          <h1 className="landing__title">The Deep End</h1>
+          <p className="landing__sub">
+            Welcome to your Deep Dive. In this section you'll answer a series of questions, one by
+            one. Your results will reflect the time you invest and how much detail you give. What you
+            share here remains private to you. Take your time with this one, and if you like, receive
+            the questions as an exploration to sit with for a little while.
+          </p>
+          <p className="dd-intro__question">What Shape will your Spirit take?</p>
+
+          <div className="dd-intro__actions">
+            {resumable && resumable.messages.length > 0 ? (
+              <>
+                <Button
+                  variant="luminous"
+                  size="lg"
+                  caps
+                  glow
+                  className="dd-intro__cta"
+                  onClick={() => beginInterview(true)}
+                >
+                  Resume your Deep Dive
+                </Button>
+                <button type="button" className="dd-textlink" onClick={() => beginInterview(false)}>
+                  Start over instead
+                </button>
+              </>
+            ) : (
+              <Button
+                variant="luminous"
+                size="lg"
+                caps
+                glow
+                className="dd-intro__cta"
+                onClick={() => beginInterview(false)}
+              >
+                Begin the Deep Dive
+              </Button>
+            )}
+          </div>
+
+          {/* Second notice point: the intro is where the reader decides to start, so the
+              AI-processing line is stated here too, before any free text is written. */}
+          <p className="ss-disclaimer dd-intro__note">
+            This will take between 30 and 60 minutes. Take your time. Your answers are never shown
+            to other users. To run the interview and write your reading, they are processed by our
+            AI provider, Anthropic, in the US. <a href="#privacy">How we handle your data</a>
+          </p>
+        </main>
+      </Layout>
+    );
+  }
+
+  if (stage === "interview") {
+    return (
+      <Layout header={{ tier: "deep", showBack: true, onBack: onHome, onHome }}>
+        <main className="view dd-chat">
+          <div className="dd-chat__scroll" ref={scrollRef}>
+            {messages.map((m, i) => (
+              <div key={i} className={`dd-msg dd-msg--${m.role}`}>
+                {m.role === "assistant" ? stripTranscriptBlock(m.content).trim() : m.content}
+              </div>
+            ))}
+            {streaming && <div className="dd-msg dd-msg--assistant">{stripTranscriptBlock(streaming).trim()}</div>}
+            {busy && !streaming && <div className="dd-msg dd-msg--assistant dd-msg--typing">…</div>}
+            {error && <div className="dd-error">{error} <button className="dd-textlink" onClick={() => runInterviewTurn(messages, runId)}>Retry</button></div>}
+          </div>
+
+          <form
+            className="dd-compose"
+            onSubmit={(e) => {
+              e.preventDefault();
+              submitAnswer();
+            }}
+          >
+            <textarea
+              className="dd-compose__input"
+              // Pre-trial feedback: "Answer with a real story" put people on the spot —
+              // they could not always recall a specific situation on demand. This asks for
+              // no particular form. The interviewer's own questions still press for
+              // specifics, so the material the extraction needs is not lost here.
+              placeholder="Take your time. However it comes out is fine…"
+              value={input}
+              onChange={(e) => setInput(e.target.value)}
+              onKeyDown={(e) => {
+                if ((e.metaKey || e.ctrlKey) && e.key === "Enter") {
+                  e.preventDefault();
+                  submitAnswer();
+                }
+              }}
+              disabled={busy}
+              rows={3}
+            />
+            <div className="dd-compose__row">
+              <span className="dd-compose__hint">⌘↵ to send · progress saves automatically</span>
+              <Button type="submit" variant="luminous" caps disabled={busy || !input.trim()}>
+                Send
+              </Button>
+            </div>
+            {/*
+              GDPR Art. 13 favours notice AT COLLECTION, and this is sensitive free text
+              plus a US transfer, so a notice sits at the compose box rather than only in
+              the privacy policy. Deliberately terse (2026-07-27): the EDPB's layered-notice
+              guidance treats a SHORT notice plus a link to the full policy as satisfying
+              Art. 13, so the LINK is the load-bearing part, not the prose. The fuller
+              statement is on the intro screen, before anything is written; this one persists
+              because a 45-minute interview leaves that intro far behind. The `#privacy`
+              hash opens the Legal overlay above this screen (App.tsx) without unmounting the
+              interview, so the link is safe to follow mid-run.
+              PENDING LAWYER PASS: wording, plus explicit consent and a retention/erasure
+              statement for stored free text (HANDOVER §11.4 item 4).
+            */}
+            {/* The first line is the notice at collection; only the second is a link.
+                NOTE: the US-transfer fact now lives in the policy alone, which the
+                layered-notice approach supports — but if the lawyer wants it surfaced
+                here, "Anthropic" becomes "Anthropic (US)" and nothing else changes. */}
+            <p className="dd-compose__notice">
+              Your answers are sent to Anthropic to generate your results.
+              <br />
+              <a href="#privacy">Read more about how we handle your data.</a>
+            </p>
+          </form>
+        </main>
+      </Layout>
+    );
+  }
+
+  if (stage === "processing") {
+    // The same full-screen particle swarm Tiers 1-2 use, in the Deep Dive's own
+    // colour scope. No `onDone`: extract → synthesize takes an indeterminate time,
+    // so the swarm loops until finishInterview moves the stage on.
+    return (
+      <Loading
+        tier="deep"
+        kicker="Reading your Deep Dive"
+        lines={processingLines}
+        sub="Reading closely. This takes a moment."
+      />
+    );
+  }
+
+  if (stage === "error") {
+    return (
+      <Layout header={{ tier: "deep", onHome }}>
+        <main className="view view--center dd-processing">
+          <p className="dd-processing__step">A snag</p>
+          <p className="dd-processing__sub">{error}</p>
+          <div className="dd-intro__actions">
+            <Button variant="luminous" caps onClick={restart}>
+              Start again
+            </Button>
+            <button type="button" className="dd-textlink" onClick={onHome}>
+              Back to home
+            </button>
+          </div>
+        </main>
+      </Layout>
+    );
+  }
+
+  // report — the Tier-3 result, rendered through the Tiers 1-2 furniture
+  // (RevealCarousel + Mythology + SymbolicProfile) with the long LLM reading as
+  // its own section rather than a replacement for them.
+  const winner = decision ? animalRef(decision.winner_id) : undefined;
+  const focusData = deepData?.find((a) => a.key === focus) ?? deepData?.[0] ?? null;
+
+  const renderBlocks = (blocks: Block[]) =>
+    blocks.map((block, i) =>
+      block.type === "heading" ? (
+        <h2 key={i} className="dd-report__h">
+          {renderSegments(block.lines[0])}
+        </h2>
+      ) : (
+        <p key={i} className="dd-report__p">
+          {block.lines.map((line, j) => (
+            <Fragment key={j}>
+              {j > 0 && <br />}
+              {renderSegments(line)}
+            </Fragment>
+          ))}
+        </p>
+      ),
+    );
+
+  // While the report streams, it renders as one live column - watching it write is
+  // part of the moment, and sections cannot be grouped from half a heading anyway.
+  // It reorganises into rows once the stream closes.
+  const streamingReading = (
+    <article className="dd-report__body sa-reading">
+      {renderBlocks(parseReport(report))}
+      <p className="dd-report__p dd-report__cursor">▍</p>
+    </article>
+  );
+
+  const structured = reportDone ? structureReport(report) : null;
+
+  return (
+    <Layout header={{ tier: "deep", showBack: true, onBack: onHome, onHome }}>
+      <main className="view view--center view--content">
+        {carouselAnimals.length > 0 ? (
+          <RevealCarousel
+            animals={carouselAnimals}
+            tierScope="deep"
+            muddy={matchResult?.muddy ?? false}
+            onFocus={handleFocus}
+            hint={null}
+          />
+        ) : (
+          winner && (
+            // Fallback: the decided animal isn't in the shared library, so there is
+            // no artwork/mythology to hang furniture on. Show the reading alone.
+            <header className="dd-report__head">
+              <span className="dd-report__eyebrow">Your animal shape</span>
+              <h1 className="dd-report__animal">{winner.name}</h1>
+            </header>
+          )
+        )}
+
+        <div className="reveal__body dd-reveal-body">
+          {/* The distillation, lifted out of its written position (fifth, after ~900
+              words) to sit directly under the carousel, always open. The report prompt
+              writes it as "the version someone screenshots and remembers", which only
+              works if they reach it. Found by shape, not heading text - see
+              deepdive/reportSections.ts. */}
+          {structured?.distillation && (
+            <section className="panel dd-short">
+              <p className="section-label">{structured.distillation.title || "The short version"}</p>
+              <article className="dd-report__body sa-reading">
+                {renderBlocks(structured.distillation.blocks)}
+              </article>
+            </section>
+          )}
+
+          {/* The reading — Tier 3's payoff. Keeps its own parchment surface; each
+              section of it is a row, with the opening one (where the animal lands)
+              already open. */}
+          <section className="panel">
+            <p className="section-label">Your reading</p>
+            {structured ? (
+              <div className="dd-report__body sa-reading">
+                {structured.lead.length > 0 && <div>{renderBlocks(structured.lead)}</div>}
+                {/* Everything starts collapsed (user's call, after seeing real output:
+                    "At your core" runs ~490 words, which open by default filled a screen
+                    and a half before the reader reached any other row). Collapsed, the
+                    whole result — carousel, distillation and a nine-row index — sits in
+                    about 1,900px. */}
+                {structured.sections.map((section, i) => (
+                  <Disclosure key={`${section.title}-${i}`} title={section.title}>
+                    {renderBlocks(section.blocks)}
+                  </Disclosure>
+                ))}
+              </div>
+            ) : (
+              streamingReading
+            )}
+          </section>
+
+          {/* Mythology and the symbolic layer share one box. They are different kinds
+              of content - the myth rows follow the carousel focus, the symbolic layer is
+              vector-based and does not - but as three collapsed rows they read as one
+              "what this shape means" group. The focused animal is named on the origin
+              row (both myth rows are its), since the panel label no longer carries it. */}
+          {(deepData || focusData) && (
+            <section className="panel">
+              <p className="section-label">Mythology &amp; symbolism</p>
+
+              {focusData && focusData.reveal.mythologyParas.length > 0 && (
+                // Composed here rather than through <Mythology> so the origin and the
+                // older-myth beat can be separate rows. <Mythology> stays exactly as it
+                // is for Tiers 1-2, whose output must not change.
+                <>
+                  <Disclosure title={`The origin of your spirit · ${focusData.name}`}>
+                    {/* .reveal-list supplies the paragraph rhythm, as it does inside
+                        <Mythology> for Tiers 1-2. Without it the levels run together. */}
+                    <div className="reveal-list">
+                      {focusData.reveal.mythologyParas.map((p, i) => (
+                        <p key={i} className="mythology__text">
+                          {p}
+                        </p>
+                      ))}
+                      {focusData.reveal.mythologyDisclaimer && (
+                        <p className="mythology__disclaimer">
+                          {focusData.reveal.mythologyDisclaimer}
+                        </p>
+                      )}
+                    </div>
+                  </Disclosure>
+                  {focusData.reveal.mythologyOlderMyth && (
+                    <Disclosure title="The older myth">
+                      <p className="mythology__text">{focusData.reveal.mythologyOlderMyth}</p>
+                    </Disclosure>
+                  )}
+                </>
+              )}
+
+              {/* Vector-based, so it does not follow the carousel focus. */}
+              {deepData && (
+                <Disclosure title="Symbolic echoes">
+                  <SymbolicProfile items={deepData[0].reveal.symbolic} onUnlock={noUnlock} bare />
+                </Disclosure>
+              )}
+            </section>
+          )}
+        </div>
+
+        {/* Share card. Tier 3 is the only one that puts written words on the card —
+            the distillation, which is why this is an image the reader places rather
+            than a page we host. Lines are taken from the promoted section verbatim. */}
+        {reportDone && deepData && focusData && (
+          <ShareCard
+            content={buildCardContent(
+              deepData[0].name,
+              deepData[0].epithet,
+              deepData[0].reveal,
+              structured?.distillation
+                ? structured.distillation.blocks.flatMap((b) =>
+                    b.lines.map((l) => l.map((s) => s.text).join("")),
+                  )
+                : [],
+            )}
+            artUrl={deepData[0].art}
+            filenameBase={`anyma-${deepData[0].name.toLowerCase()}`}
+          />
+        )}
+
+        {reportDone && (
+          <footer className="dd-report__foot">
+            <div className="dd-reaction">
+              <p className="dd-reaction__q">How much does this feel like you?</p>
+              {reaction === null ? (
+                <div className="dd-reaction__scale" role="group" aria-label="Rate 1 to 5">
+                  {[1, 2, 3, 4, 5].map((n) => (
+                    <button key={n} type="button" className="dd-reaction__dot" onClick={() => chooseReaction(n)}>
+                      {n}
+                    </button>
+                  ))}
+                </div>
+              ) : (
+                <p className="dd-reaction__thanks">Thank you.</p>
+              )}
+            </div>
+
+            <p className="dd-report__disclaimer">
+              {/* TODO(legal): replace with the lawyer-reviewed fuller disclaimer (prep kit §3.8). */}
+              A reading, not a diagnosis. This is not medical, psychological, or professional
+              advice. If you're struggling, please reach out to a qualified professional or a
+              local support line.
+            </p>
+
+            <div className="dd-intro__actions">
+              <button type="button" className="dd-textlink" onClick={restart}>
+                Take the Deep Dive again
+              </button>
+              <button type="button" className="dd-textlink" onClick={onHome}>
+                Back to home
+              </button>
+            </div>
+          </footer>
+        )}
+      </main>
+    </Layout>
+  );
+}

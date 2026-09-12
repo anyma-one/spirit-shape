@@ -23,7 +23,10 @@ export const ANIMAL_ART: Record<string, string> = {
   Hummingbird: "anyma_hummingbird.png",
 };
 
-export const ANIMAL_ART_BASE = "/animals/";
+// Derived from the build's base rather than hardcoded to the root, so the art still resolves
+// when the app is served under a sub-path (anyma.one/soul/). BASE_URL is "/" for a standalone
+// build and "/soul/" under the anyma monorepo build; both already end in a slash.
+export const ANIMAL_ART_BASE = `${import.meta.env.BASE_URL}animals/`;
 
 /** Public URL for an animal's line-art, or `null` if the name isn't mapped. */
 export function animalArtUrl(name: string): string | null {

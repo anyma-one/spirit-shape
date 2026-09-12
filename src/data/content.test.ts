@@ -114,4 +114,16 @@ describe("mythology (§4/§7)", () => {
       if (has) expect(MYTHOLOGY[id].olderMyth!.length, id).toBeGreaterThan(0);
     }
   });
+
+  // L3 (the Deep Dive's layer) is now written for all 16. It renders as a single <p>,
+  // so it must stay one paragraph, and it must not be a stub or a copy of L2.
+  it("covers every common animal with a substantial L3 distinct from L2", () => {
+    for (const id of IDS) {
+      const l3 = MYTHOLOGY[id].l3;
+      expect(l3, id).toBeDefined();
+      expect(l3!.trim().length, id).toBeGreaterThan(200);
+      expect(l3!.trim(), id).not.toBe(MYTHOLOGY[id].l2.trim());
+      expect(l3!.includes("\n"), `${id} must be one paragraph`).toBe(false);
+    }
+  });
 });
