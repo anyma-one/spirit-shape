@@ -8,6 +8,8 @@ const REPORT = [
   "## The shape you keep making",
   "You go quiet, you watch, and you come back with the thing nobody had put together.",
   "That is the Owl, and it is not the Owl's reputation, it is your evidence.",
+  "## Where you break the pattern",
+  "Where the Owl would wait, you speak. That is the Hawk in you, and it is yours.",
   "## The self you carry",
   "You describe yourself as easy-going. The stories do not.",
   "## Where it costs you",
@@ -26,6 +28,7 @@ describe("report sectioning", () => {
     expect(lead).toEqual([]);
     expect(sections.map((s) => s.title)).toEqual([
       "The shape you keep making",
+      "Where you break the pattern",
       "The self you carry",
       "Where it costs you",
       "What you have not noticed",
@@ -43,6 +46,7 @@ describe("report sectioning", () => {
     expect(r.distillation?.title).toBe("The short version");
     expect(r.sections.map((s) => s.title)).toEqual([
       "At your core",
+      "Where the shape doesn't fit",
       "You & the world",
       "What challenges you",
       "What you might not be aware of",
@@ -50,6 +54,13 @@ describe("report sectioning", () => {
     ]);
     // Content still comes from the section that was in that position.
     expect(r.distillation?.blocks[0].lines).toHaveLength(3);
+  });
+
+  it("ignores a title heading with nothing under it", () => {
+    const r = structureReport(`# The Owl\n\n${REPORT}`);
+    expect(r.distillation?.title).toBe("The short version");
+    expect(r.sections[0].title).toBe("At your core");
+    expect(r.sections).toHaveLength(6);
   });
 
   it("falls back to the model's own headings when the section count is off", () => {

@@ -4,7 +4,7 @@
 // use "plain headings of your own choosing" (api/deepdive-report.ts, STRUCTURE), so
 // the headings are NOT a fixed vocabulary. Nothing here may match on heading text.
 //
-// The prompt's intended shape is: four parts, then a short distillation ("three or
+// The prompt's intended shape is: five parts, then a short distillation ("three or
 // four short lines ... the version someone screenshots and remembers"), then a close
 // of exactly three questions. The distillation is promoted to the top of the result
 // page, always open, so the payoff is not buried under ~900 words. It is found by
@@ -21,10 +21,11 @@ import { parseReport, type Block } from "./reportFormat";
  * every reader sees the same navigation instead of per-run wording.
  *
  * Order must match the prompt's STRUCTURE block in api/deepdive-report.ts.
- * Index 4 is the distillation, which the page promotes to the top.
+ * Index 5 is the distillation, which the page promotes to the top.
  */
 export const SECTION_LABELS = [
   "At your core",
+  "Where the shape doesn't fit",
   "You & the world",
   "What challenges you",
   "What you might not be aware of",
@@ -32,7 +33,7 @@ export const SECTION_LABELS = [
   "Three questions to go deeper",
 ] as const;
 
-const DISTILLATION_INDEX = 4;
+const DISTILLATION_INDEX = 5;
 
 export interface ReportSection {
   /** The label to display: pinned copy when the shape matched, else the model's own. */
@@ -95,10 +96,13 @@ export function splitSections(blocks: Block[]): { lead: Block[]; sections: Repor
 
 export function structureReport(text: string): StructuredReport {
   const split = splitSections(parseReport(text));
-  const sections = split.sections;
+  // A heading with nothing under it is a title, not a section (real run 2026-09-27:
+  // the model opened with "# The Bear" straight above "## At Your Core"). Counting it
+  // would break the positional match below and lose the pinned labels.
+  const sections = split.sections.filter((s) => s.blocks.length > 0);
   const lead = isStrayTitle(split.lead) ? [] : split.lead;
 
-  // HAPPY PATH: the report has exactly the six sections the prompt asks for, so
+  // HAPPY PATH: the report has exactly the seven sections the prompt asks for, so
   // position is trustworthy. Swap in the pinned labels and take the distillation by
   // index - no guessing at all.
   if (sections.length === SECTION_LABELS.length) {

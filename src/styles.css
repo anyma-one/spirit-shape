@@ -1081,6 +1081,23 @@ body,
   -webkit-mask-size: contain;
   mask-size: contain;
 }
+/* Deep Dive cards: portrait 2:3 paintings instead of square line-art masks. A
+   taller scene so the focused card (scaled 1.12 by the controller) and its float
+   fit; the controller's slot maths is unchanged. */
+.reveal-carousel--cards .rc-scene {
+  height: 440px;
+}
+.reveal-carousel--cards .rc-an {
+  width: 240px;
+  height: 360px;
+}
+.rc-an-card {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  user-select: none;
+}
 /* Float + breathing aura on the primary while it holds focus (bound to primary). */
 .rc-an.rc-settled {
   animation: rc-focus-settle 4.6s ease-in-out infinite;

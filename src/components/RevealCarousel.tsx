@@ -10,6 +10,8 @@ export interface CarouselAnimal {
   pct?: number;
   art: string; // /animals/anyma_x.png
   tint: string; // CSS colour for the mask fill
+  /** Deep Dive only: a full-colour card shown in place of the tinted line-art mask. */
+  card?: string;
   open: boolean; // clickable → focusable
   softLock: boolean; // filled look but shows lock (Secondary in Speed)
   unlockHint: string;
@@ -57,6 +59,8 @@ export const RevealCarousel = memo(function RevealCarousel({
 }) {
   const rootRef = useRef<HTMLDivElement>(null);
   const primary = animals[0];
+  // Cards are portrait, so the scene and slots get their own sizing (styles.css).
+  const cards = animals.some((a) => a.card);
 
   useEffect(() => {
     const root = rootRef.current;
@@ -81,7 +85,7 @@ export const RevealCarousel = memo(function RevealCarousel({
   }, []);
 
   return (
-    <div ref={rootRef} className="reveal-carousel">
+    <div ref={rootRef} className={cards ? "reveal-carousel reveal-carousel--cards" : "reveal-carousel"}>
       <span className="rc-kicker rc-fade">{muddy ? "Closest read" : "Your match"}</span>
 
       <div className="rc-scene">
@@ -93,14 +97,21 @@ export const RevealCarousel = memo(function RevealCarousel({
           // pipeline, so putting them on the same element would clip the glow/blur
           // to the mask shape — nesting keeps the glow following the animal's alpha.
           <div key={a.key} className="rc-an" data-key={a.key} role="img" aria-label={`${a.name} spirit animal`}>
-            <div
-              className="rc-an-fill"
-              style={{
-                background: a.tint,
-                WebkitMaskImage: `url(${a.art})`,
-                maskImage: `url(${a.art})`,
-              }}
-            />
+            {a.card ? (
+              // The card is already a finished painting, so it is shown as-is; the
+              // controller's glow + blur on the wrapper still follow its alpha (the
+              // rounded corners are transparent).
+              <img className="rc-an-card" src={a.card} alt="" draggable={false} />
+            ) : (
+              <div
+                className="rc-an-fill"
+                style={{
+                  background: a.tint,
+                  WebkitMaskImage: `url(${a.art})`,
+                  maskImage: `url(${a.art})`,
+                }}
+              />
+            )}
           </div>
         ))}
       </div>

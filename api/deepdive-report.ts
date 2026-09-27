@@ -43,7 +43,7 @@ QUOTE ALMOST NEVER. At most one anchoring detail per section, and only when the 
 carries something the abstraction loses. Never string their answers together as a citation.
 If a sentence just tells them what they told you, cut it.
 
-EMPHASIS. In each of the four sections, mark the single most important sentence — the sharpest
+EMPHASIS. In each of the five sections, mark the single most important sentence — the sharpest
 mirror, the line you most want them to stop on — by wrapping it in **double asterisks** so it
 renders bold. At most ONE per section, never a whole paragraph, never more than one sentence. If
 no line in a section earns it, bold nothing there. Do not bold anything in the short distillation
@@ -74,7 +74,7 @@ indigenous belief. If you do not have a real, sourced story in front of you, you
 one, and you say nothing. The absence of a myth, named honestly, is worth more than a
 beautiful fabrication. This is not negotiable and nothing below overrides it.
 
-STRUCTURE — four parts, a short distillation, and a close. Plain headings of your own choosing,
+STRUCTURE — five parts, a short distillation, and a close. Plain headings of your own choosing,
 no numbers. State your findings as findings: confident, direct, no "perhaps" or "it seems". You
 have the evidence; speak from it.
 
@@ -89,6 +89,23 @@ AT YOUR CORE
    animal genuinely theirs first, or the distinction means nothing. The result screen labels
    it "Second nature", so do not write it as a runner-up, a close call, or an also-ran. Other
    animals may sit close; acknowledge that without re-opening the verdict.
+   Build the animal ONLY from the traits listed under FITS in HOW THE SHAPE FITS. Never
+   present a trait listed under DEPARTURES as part of the shape - that belongs to the next
+   part, and saying it here would contradict it.
+
+WHERE THE SHAPE DOESN'T FIT
+   The honest edge of the match, so the verdict can be trusted. Use ONLY the traits listed
+   under DEPARTURES - never one from FITS, never one you derive yourself. They are listed
+   strongest first; cover each (at most three) as one short beat: what the shape would lead
+   you to expect, what they actually do, and what that means about them. Ground each in their
+   evidence, told as a finding, not a verdict on the animal. Where a departure is carried by
+   their second nature, say so - that is the second animal at work, and it ties this part back
+   to the core. Where neither animal carries it, it is simply theirs: a part of them no single
+   shape holds. Frame the whole part as the edge of the match, not a correction of it - the
+   shape still holds where it fits; do not soften or re-open the verdict. Keep it distinct
+   from the parts below: this is them against the animal, not them against themselves. If
+   DEPARTURES is empty, say in one or two sentences that the shape fits them closely, and do
+   not manufacture an exception.
 
 YOU & THE WORLD
    The self they carry, and the self other people meet. Open with how they see themselves -
@@ -138,10 +155,10 @@ than long ones. Simple English - many readers are not native speakers. Never cli
 chatty, never mystical enough to become vague. Trust the material; it does not need
 decoration.
 
-800 to 1200 words for the four sections, plus the short distillation and the three questions.
+900 to 1400 words for the five sections, plus the short distillation and the three questions.
 Short means you are generalising. Long means you are padding.
 
-Prose only. No JSON, no fences, no preamble.`;
+Prose only. No title line, no JSON, no fences, no preamble.`;
 
 interface AxisEntry {
   code: string;
@@ -171,6 +188,42 @@ interface AnimalRef {
   name: string;
   note: string;
 }
+// Computed client-side (src/deepdive/shapeFit.ts): a fixed, disjoint split of the
+// traits into where the chosen shape holds and where the person departs from it.
+interface FitTrait {
+  trait: string;
+  theirs: string;
+  shape: string;
+  carriedBy?: string | null;
+}
+interface ShapeFit {
+  fits: FitTrait[];
+  departures: FitTrait[];
+}
+
+/** Keep only well-formed entries; the client is the only sender, but the body is input. */
+function readFit(value: unknown): ShapeFit {
+  const list = (v: unknown): FitTrait[] =>
+    Array.isArray(v)
+      ? v
+          .filter(
+            (t): t is FitTrait =>
+              !!t &&
+              typeof t.trait === "string" &&
+              typeof t.theirs === "string" &&
+              typeof t.shape === "string",
+          )
+          .slice(0, 8)
+          .map((t) => ({
+            trait: t.trait.slice(0, 80),
+            theirs: t.theirs.slice(0, 160),
+            shape: t.shape.slice(0, 160),
+            carriedBy: typeof t.carriedBy === "string" ? t.carriedBy.slice(0, 40) : null,
+          }))
+      : [];
+  const f = value as { fits?: unknown; departures?: unknown } | undefined;
+  return { fits: list(f?.fits), departures: list(f?.departures) };
+}
 
 const AXIS_ORDER = ["SOC", "TMP", "COG", "BND", "AUT", "REC", "NOV", "EXP"];
 
@@ -182,6 +235,7 @@ function buildContext(
   decision: Decision,
   winner: AnimalRef | undefined,
   runnerUp: AnimalRef | undefined,
+  fit: ShapeFit,
 ): string {
   const axisLines = AXIS_ORDER.map((code) => {
     const a = axes.find((x) => x.code === code);
@@ -203,6 +257,20 @@ function buildContext(
   const runnerLine = runnerUp
     ? `${runnerUp.name} (${runnerUp.id}) — ${runnerUp.note}`
     : decision.runnerup_id;
+  const fitLines = fit.fits.length
+    ? fit.fits.map((t) => `- ${t.trait}: the shape is ${t.shape}; they are ${t.theirs}`).join("\n")
+    : "(none)";
+  const departureLines = fit.departures.length
+    ? fit.departures
+        .map(
+          (t) =>
+            `- ${t.trait}: the shape is ${t.shape}; they are ${t.theirs}` +
+            (t.carriedBy
+              ? ` — carried by their second nature, the ${t.carriedBy}`
+              : " — carried by neither animal; simply theirs"),
+        )
+        .join("\n")
+    : "(none)";
 
   return [
     "THEIR ANSWERS (the interview transcript)",
@@ -222,6 +290,12 @@ function buildContext(
     `Runner-up: ${runnerLine}`,
     `Distinction: ${decision.distinction}`,
     `Comparison notes: ${decision.comparison_notes}`,
+    "",
+    "HOW THE SHAPE FITS (fixed - do not re-derive; the trait names are for you, never for the page)",
+    "FITS (the shape holds here):",
+    fitLines,
+    "DEPARTURES (the shape does not hold here):",
+    departureLines,
   ].join("\n");
 }
 
@@ -282,6 +356,7 @@ export default async function handler(req: ReqLike, res: ResLike): Promise<void>
         decision?: Decision;
         winner?: AnimalRef;
         runnerUp?: AnimalRef;
+        fit?: unknown;
       }
     | undefined;
 
@@ -302,6 +377,7 @@ export default async function handler(req: ReqLike, res: ResLike): Promise<void>
     decision,
     b?.winner,
     b?.runnerUp,
+    readFit(b?.fit),
   );
 
   res.setHeader("Content-Type", "text/plain; charset=utf-8");

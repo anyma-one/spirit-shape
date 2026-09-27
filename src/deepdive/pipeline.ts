@@ -23,6 +23,7 @@ import {
   type RankedAnimal,
 } from "./ranker";
 import { AccessDeniedError, passcodeHeaders } from "./access";
+import type { ShapeFit } from "./shapeFit";
 
 // ---------------------------------------------------------------------------
 // Wire types (mirror the api/deepdive-* payloads)
@@ -292,6 +293,8 @@ export interface ReportInput {
   decision: Decision;
   winner?: AnimalRef;
   runnerUp?: AnimalRef;
+  /** Where the chosen shape holds and where the person departs (shapeFit.ts). */
+  fit?: ShapeFit;
 }
 
 export function streamReport(

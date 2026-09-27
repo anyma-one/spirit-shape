@@ -9,9 +9,11 @@ import { buildCardContent } from "../share/content";
 import { Button } from "./ui/Button";
 import { ANIMAL_BY_ID } from "../data/archetypes";
 import { animalArtUrl } from "../data/animalArt";
+import { deepCardUrl, preloadCards } from "../data/deepCards";
 import { PROFILES } from "../data/profiles";
 import { buildDeepReveal } from "../reveal";
 import { toMatchResult } from "../deepdive/matchResult";
+import { shapeFit } from "../deepdive/shapeFit";
 import type { Match, MatchResult } from "../engine";
 import { RevealCarousel, type CarouselAnimal } from "./RevealCarousel";
 import type { FocusKey } from "./ui/revealCarousel";
@@ -116,6 +118,7 @@ export function DeepDive({
       name: match.archetype.name,
       epithet: PROFILES[match.archetype.id]?.epithet ?? "",
       art: animalArtUrl(match.archetype.name) ?? "",
+      card: deepCardUrl(match.archetype.id) ?? undefined,
       // Mythology follows the focused animal (as in Results); the symbolic layer
       // is vector-based and stays put.
       reveal: buildDeepReveal({ ...matchResult, primary: match }),
@@ -136,6 +139,7 @@ export function DeepDive({
         // not scored, so a cosine split could contradict it (see matchResult.ts).
         pct: undefined,
         art: a.art,
+        card: a.card,
         tint: a.key === "primary" ? "var(--tier)" : "#cbe3ff",
         // Top of the funnel — both animals are fully open, nothing to unlock.
         open: true,
@@ -223,6 +227,8 @@ export function DeepDive({
         "## The shape you keep making",
         `You described the same move three times without noticing: you go quiet, you watch, and you come back with the thing nobody else had put together. **That is the Owl, and it is your evidence, not the Owl's reputation.** ${filler(10)}`,
         filler(12),
+        "## Where you break the pattern",
+        `${filler(6)} **Where the shape would wait, you speak — and that is your second nature at work.** ${filler(8)}`,
         "## The self you carry",
         `${filler(6)} **You experience yourself defending your attention; they experience someone who reliably gives in.** ${filler(8)}`,
         "## Where it costs you",
@@ -375,6 +381,12 @@ export function DeepDive({
       // Beta log (derived vector + ranking only; fire-and-forget).
       logRun(buildRunLog(id, new Date().toISOString(), profile.axes, nomination.ranked, dec));
 
+      // Fetch both cards while the loading screen is still up, so the carousel's
+      // intro reveals the paintings rather than empty frames (capped at 2.5s).
+      await preloadCards(
+        [dec.winner_id, dec.runnerup_id].map(deepCardUrl).filter((u): u is string => u !== null),
+      );
+
       // Stream the report.
       setStage("report");
       setBusy(false);
@@ -388,6 +400,7 @@ export function DeepDive({
           decision: dec,
           winner: animalRef(dec.winner_id),
           runnerUp: animalRef(dec.runnerup_id),
+          fit: shapeFit(profile.axes, dec.winner_id, dec.runnerup_id),
         },
         setReport,
       );
