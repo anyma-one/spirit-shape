@@ -10,13 +10,16 @@ import { createHash, timingSafeEqual } from "node:crypto";
 // see it (only follow-up framing and the report do). The request body has no
 // slot for it, so it cannot leak.
 //
-// Structured output via forced tool-use: the model must call `record_profile`
-// with the schema below, so parsing is reliable (no regex on prose).
+// Structured output via JSON outputs (`output_config.format`): the response is
+// constrained to the schema below, so parsing is reliable (no regex on prose).
+// Not forced tool use — Claude Opus 5.5 rejects `tool_choice` "tool"/"any", and
+// JSON outputs work on every current model, so any ANTHROPIC_EXTRACT_MODEL works.
 //
-// Model: extraction is pinned to Sonnet 4.6 per ship-prep. Config lives in env
-// (see .env.example — the single source of truth for per-stage models); this
-// constant is the fallback if ANTHROPIC_EXTRACT_MODEL is unset.
-const DEFAULT_MODEL = "claude-sonnet-4-6";
+// Model: Sonnet 5. Config lives in env (see .env.example — the single source of
+// truth for per-stage models); this constant is the fallback if
+// ANTHROPIC_EXTRACT_MODEL is unset.
+const DEFAULT_MODEL = "claude-sonnet-5";
+const DEFAULT_EFFORT = "medium";
 
 // Verbatim rules from anyma-tier3-extraction-v3.md (the extraction message),
 // through the answer-classification section. The transcript + the JSON tail are
@@ -176,70 +179,77 @@ judgement is what stops a disposition from being scored as a behaviour.
 A described instance of the person going toward company is behavioural evidence for high SOC,
 not a tension. Score it.
 
-Call the record_profile tool with the structured result. Return all eight axes, exactly once,
-in the canonical order SOC, TMP, COG, BND, AUT, REC, NOV, EXP.`;
+Return the structured result as JSON in the required format. Return all eight axes, exactly
+once, in the canonical order SOC, TMP, COG, BND, AUT, REC, NOV, EXP.`;
 
 const AXIS_CODES = ["SOC", "TMP", "COG", "BND", "AUT", "REC", "NOV", "EXP"];
 
-const PROFILE_TOOL = {
-  name: "record_profile",
-  description: "Record the structured trait profile extracted from the interview transcript.",
-  input_schema: {
-    type: "object" as const,
-    additionalProperties: false,
-    properties: {
-      axes: {
-        type: "array",
-        minItems: 8,
-        maxItems: 8,
-        description: "All eight axes, exactly once, in canonical order.",
-        items: {
-          type: "object",
-          additionalProperties: false,
-          properties: {
-            code: { type: "string", enum: AXIS_CODES },
-            score: { type: "integer", minimum: -2, maximum: 2 },
-            evidence: {
-              type: "string",
-              description: "Must contain at least one verbatim quote, 25 words or fewer.",
-            },
-            confidence: { type: "string", enum: ["low", "medium", "high"] },
-          },
-          required: ["code", "score", "evidence", "confidence"],
-        },
-      },
-      aspiration: {
+// JSON-outputs schema. No minItems/maxItems/minimum/maximum: the JSON-outputs
+// schema subset does not support numeric or array-length constraints, so the
+// score range is an enum and the axis count is checked after parsing.
+const PROFILE_SCHEMA = {
+  type: "object",
+  additionalProperties: false,
+  properties: {
+    axes: {
+      type: "array",
+      description: "All eight axes, exactly once, in canonical order.",
+      items: {
         type: "object",
         additionalProperties: false,
         properties: {
-          stated_values: { type: "string" },
-          direction_of_travel: { type: "string" },
-          evidence: { type: "string" },
-        },
-        required: ["stated_values", "direction_of_travel", "evidence"],
-      },
-      gaps: {
-        type: "array",
-        description: "Empty array if there are no real gaps. A manufactured gap is worse than none.",
-        items: {
-          type: "object",
-          additionalProperties: false,
-          properties: {
-            axis: { type: "string", enum: AXIS_CODES },
-            aim: { type: "string" },
-            behaviour: { type: "string" },
-            reading: {
-              type: "string",
-              enum: ["method-fit", "conflict", "absent-value", "unresolved"],
-            },
+          code: { type: "string", enum: AXIS_CODES },
+          score: { type: "integer", enum: [-2, -1, 0, 1, 2] },
+          evidence: {
+            type: "string",
+            description: "Must contain at least one verbatim quote, 25 words or fewer.",
           },
-          required: ["axis", "aim", "behaviour", "reading"],
+          confidence: { type: "string", enum: ["low", "medium", "high"] },
         },
+        required: ["code", "score", "evidence", "confidence"],
       },
     },
-    required: ["axes", "aspiration", "gaps"],
+    aspiration: {
+      type: "object",
+      additionalProperties: false,
+      properties: {
+        stated_values: { type: "string" },
+        direction_of_travel: { type: "string" },
+        evidence: { type: "string" },
+      },
+      required: ["stated_values", "direction_of_travel", "evidence"],
+    },
+    gaps: {
+      type: "array",
+      description: "Empty array if there are no real gaps. A manufactured gap is worse than none.",
+      items: {
+        type: "object",
+        additionalProperties: false,
+        properties: {
+          axis: { type: "string", enum: AXIS_CODES },
+          aim: { type: "string" },
+          behaviour: { type: "string" },
+          reading: {
+            type: "string",
+            enum: ["method-fit", "conflict", "absent-value", "unresolved"],
+          },
+        },
+        required: ["axis", "aim", "behaviour", "reading"],
+      },
+    },
   },
+  required: ["axes", "aspiration", "gaps"],
 };
+
+// ---- Per-stage effort --------------------------------------------------------
+// Claude Opus 5.5 / Sonnet 5 always think (adaptive thinking); `effort` is the
+// control for how much, and so for latency and cost. Override per stage with the
+// env var named at the call site; anything unrecognised falls back to the default.
+type Effort = "low" | "medium" | "high" | "xhigh" | "max";
+const EFFORTS: readonly string[] = ["low", "medium", "high", "xhigh", "max"];
+function effortFrom(value: string | undefined, fallback: Effort): Effort {
+  return value && EFFORTS.includes(value) ? (value as Effort) : fallback;
+}
 
 interface ReqLike {
   method?: string;
@@ -280,20 +290,45 @@ export default async function handler(req: ReqLike, res: ResLike): Promise<void>
 
   const client = new Anthropic({ apiKey });
   try {
-    const response = await client.messages.create({
+    // Server-side refusal fallback: if a safety classifier declines the request,
+    // the API re-runs it on Anthropic's recommended model for that category inside
+    // the same call, instead of returning the refusal.
+    const response = await client.beta.messages.create({
       model: process.env.ANTHROPIC_EXTRACT_MODEL || DEFAULT_MODEL,
-      max_tokens: 2048,
+      // Thinking counts toward max_tokens, so leave room for it plus the JSON.
+      max_tokens: 16000,
+      betas: ["server-side-fallback-2026-07-01"],
+      fallbacks: "default",
+      output_config: {
+        effort: effortFrom(process.env.ANTHROPIC_EXTRACT_EFFORT, DEFAULT_EFFORT),
+        format: { type: "json_schema", schema: PROFILE_SCHEMA },
+      },
       system: EXTRACTION_RULES,
-      tools: [PROFILE_TOOL],
-      tool_choice: { type: "tool", name: "record_profile" },
       messages: [{ role: "user", content: `THE TRANSCRIPT\n\n${transcript}` }],
     });
-    const toolUse = response.content.find((c) => c.type === "tool_use");
-    if (!toolUse || toolUse.type !== "tool_use") {
+    if (response.stop_reason === "refusal") {
+      res.status(502).json({ error: "Extraction was declined by the model" });
+      return;
+    }
+    if (response.stop_reason === "max_tokens") {
+      res.status(502).json({ error: "Extraction ran out of room before finishing" });
+      return;
+    }
+    const text = response.content
+      .map((block) => (block.type === "text" ? block.text : ""))
+      .join("");
+    let profile: { axes?: unknown[] };
+    try {
+      profile = JSON.parse(text) as { axes?: unknown[] };
+    } catch {
       res.status(502).json({ error: "Extraction produced no structured output" });
       return;
     }
-    res.status(200).json({ profile: toolUse.input });
+    if (!Array.isArray(profile.axes) || profile.axes.length !== AXIS_CODES.length) {
+      res.status(502).json({ error: "Extraction did not return all eight axes" });
+      return;
+    }
+    res.status(200).json({ profile });
   } catch (err) {
     const detail = err instanceof Error ? err.message : "Unknown error";
     res.status(502).json({ error: "Extraction failed", detail });

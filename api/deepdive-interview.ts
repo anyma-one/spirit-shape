@@ -12,10 +12,14 @@ import { createHash, timingSafeEqual } from "node:crypto";
 // and so on, until the model emits a `TRANSCRIPT — pass to extraction` block
 // and stops. The client detects that marker to end the interview.
 //
-// Model: the driver runs the whole interview; pinned to Opus 4.8 per ship-prep.
-// Config lives in env (see .env.example — the single source of truth for per-stage
-// models); this constant is the fallback if ANTHROPIC_DRIVER_MODEL is unset.
-const DEFAULT_MODEL = "claude-opus-4-8";
+// Model: the driver runs the whole interview. Config lives in env (see
+// .env.example — the single source of truth for per-stage models); this constant
+// is the fallback if ANTHROPIC_DRIVER_MODEL is unset.
+// Effort low: the reader waits on every turn, and thinking happens before the
+// first word streams. Raise ANTHROPIC_DRIVER_EFFORT to "medium" if the questions
+// get shallow.
+const DEFAULT_MODEL = "claude-opus-5-5";
+const DEFAULT_EFFORT = "low";
 
 // Verbatim from anyma-tier3-conversational-driver-v0.9.md (the driver prompt).
 const DRIVER_PROMPT = `You are the interviewer for anyma's Deep Dive. Your only job is to draw out described
@@ -152,6 +156,21 @@ ONE QUESTION AT A TIME. Never two on screen. Ask, wait, decide the next.
 ANTI-ANCHORING. If a prior-tier (non-Deep-Dive) result is loaded, use it only to choose which
 dimensions to probe harder, never to decide anything, and never mention it.`;
 
+// ---- Per-stage effort --------------------------------------------------------
+// Claude Opus 5.5 / Sonnet 5 always think (adaptive thinking); `effort` is the
+// control for how much, and so for latency and cost. Override per stage with the
+// env var named at the call site; anything unrecognised falls back to the default.
+type Effort = "low" | "medium" | "high" | "xhigh" | "max";
+const EFFORTS: readonly string[] = ["low", "medium", "high", "xhigh", "max"];
+function effortFrom(value: string | undefined, fallback: Effort): Effort {
+  return value && EFFORTS.includes(value) ? (value as Effort) : fallback;
+}
+
+// Written into the text stream when a refusal fallback restarts the reply on
+// another model: the client drops everything before it (src/deepdive/pipeline.ts
+// STREAM_RESET — keep the two in sync).
+const STREAM_RESET = "\u001e";
+
 interface ReqLike {
   method?: string;
   headers?: Record<string, string | string[] | undefined>;
@@ -221,10 +240,11 @@ export default async function handler(req: ReqLike, res: ResLike): Promise<void>
     // Prompt caching (driver only). The system prompt is resent verbatim every
     // turn and the interview history grows monotonically — both are ideal cache
     // prefixes, so a breakpoint on the system block AND on the last message block
-    // lets each turn re-read the prior prefix at ~10% input cost. Opus 4.8 only
-    // caches a >=4096-token prefix: the system prompt alone may be under that (a
-    // pure no-op if so), but the growing conversation clears the floor within a
-    // couple of turns. Other stages stay uncached per the ship-prep brief.
+    // lets each turn re-read the prior prefix at a fraction of the input cost.
+    // Opus 5.5 caches prefixes from 512 tokens, so the ~3.1k-token system prompt
+    // caches on its own from the first turn. History is plain text only (no
+    // thinking blocks are replayed), so edits to it cannot invalidate reasoning.
+    // Other stages stay uncached per the ship-prep brief.
     const system = [
       {
         type: "text" as const,
@@ -246,19 +266,38 @@ export default async function handler(req: ReqLike, res: ResLike): Promise<void>
           }
         : m,
     );
-    const stream = client.messages.stream({
+    // Server-side refusal fallback: if a safety classifier declines the request,
+    // the API re-runs it on Anthropic's recommended model for that category inside
+    // the same call, instead of returning the refusal.
+    const stream = client.beta.messages.stream({
       model: process.env.ANTHROPIC_DRIVER_MODEL || DEFAULT_MODEL,
-      max_tokens: 1024,
+      // Thinking counts toward max_tokens (its text is not returned), so leave room
+      // for it as well as the reply.
+      max_tokens: 16000,
+      betas: ["server-side-fallback-2026-07-01"],
+      fallbacks: "default",
+      output_config: { effort: effortFrom(process.env.ANTHROPIC_DRIVER_EFFORT, DEFAULT_EFFORT) },
       system,
       messages: cachedMessages,
     });
+    let wrote = false;
     for await (const event of stream) {
-      if (
-        event.type === "content_block_delta" &&
-        event.delta.type === "text_delta"
-      ) {
+      if (event.type === "content_block_start" && event.content_block.type === "fallback") {
+        // Declined mid-stream: the fallback model starts the reply over.
+        if (wrote) res.write(STREAM_RESET);
+      } else if (event.type === "content_block_delta" && event.delta.type === "text_delta") {
         res.write(event.delta.text);
+        wrote = true;
       }
+    }
+    const final = await stream.finalMessage();
+    if (final.stop_reason === "refusal") {
+      // The whole fallback chain declined.
+      if (!wrote) {
+        res.status(502).json({ error: "The interview was declined by the model" });
+        return;
+      }
+      res.write("\n\n[error] The interview was declined by the model");
     }
     res.end();
   } catch (err) {

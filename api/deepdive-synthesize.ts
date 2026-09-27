@@ -3,7 +3,8 @@ import { createHash, timingSafeEqual } from "node:crypto";
 
 // Deep Dive (Tier 3) — synthesis: commit to ONE animal from the candidates.
 //
-// SELF-CONTAINED (README §4 / HANDOVER §4). Structured output via forced tool-use.
+// SELF-CONTAINED (README §4 / HANDOVER §4). Structured output via JSON outputs
+// (`output_config.format`) — not forced tool use, which Claude Opus 5.5 rejects.
 //
 // ANTI-ANCHORING: no prior-tier result reaches this endpoint. Synthesis is free
 // to overturn the prior result because it never sees it. It also does not see the
@@ -11,7 +12,9 @@ import { createHash, timingSafeEqual } from "node:crypto";
 // and gaps, plus the rank-only candidates block.
 //
 // Model: strong tier (synthesis + report). Override with ANTHROPIC_SYNTH_MODEL.
-const DEFAULT_MODEL = "claude-opus-4-8";
+// Effort high: one short, consequential judgement — the thinking is the point.
+const DEFAULT_MODEL = "claude-opus-5-5";
+const DEFAULT_EFFORT = "high";
 
 // Verbatim from anyma-tier3-extraction-v3.md MESSAGE 4 (synthesis), with ONE
 // added sentence per anyma-tier3-shipprep-claude-code-brief.md Task 2 (marked).
@@ -53,7 +56,7 @@ HOW YOU WEIGH EVIDENCE
   conceding that it badly misses an axis you marked high-confidence, it is not the answer.
 - Do not let a vivid single anecdote outweigh a consistent pattern.
 
-Call the record_decision tool with your verdict. Never use the phrase "spirit animal".`;
+Return your verdict as JSON in the required format. Never use the phrase "spirit animal".`;
 
 interface AxisEntry {
   code: string;
@@ -77,33 +80,31 @@ interface Candidate {
 
 const AXIS_ORDER = ["SOC", "TMP", "COG", "BND", "AUT", "REC", "NOV", "EXP"];
 
-const DECISION_TOOL = {
-  name: "record_decision",
-  description: "Record the committed animal, the runner-up, and the deciding distinction.",
-  input_schema: {
-    type: "object" as const,
-    additionalProperties: false,
-    properties: {
-      winner_id: { type: "string", description: "id of the committed animal" },
-      runnerup_id: { type: "string", description: "id of the closest runner-up" },
-      distinction: {
-        type: "string",
-        description: "The exact, evidence-grounded distinction that decided winner over runner-up.",
-      },
-      comparison_notes: {
-        type: "string",
-        description: "What each top candidate captures and misses.",
-      },
-      decided_on_low_confidence: { type: "boolean" },
+// JSON-outputs schema: the committed animal, the runner-up, and the deciding
+// distinction.
+const DECISION_SCHEMA = {
+  type: "object",
+  additionalProperties: false,
+  properties: {
+    winner_id: { type: "string", description: "id of the committed animal" },
+    runnerup_id: { type: "string", description: "id of the closest runner-up" },
+    distinction: {
+      type: "string",
+      description: "The exact, evidence-grounded distinction that decided winner over runner-up.",
     },
-    required: [
-      "winner_id",
-      "runnerup_id",
-      "distinction",
-      "comparison_notes",
-      "decided_on_low_confidence",
-    ],
+    comparison_notes: {
+      type: "string",
+      description: "What each top candidate captures and misses.",
+    },
+    decided_on_low_confidence: { type: "boolean" },
   },
+  required: [
+    "winner_id",
+    "runnerup_id",
+    "distinction",
+    "comparison_notes",
+    "decided_on_low_confidence",
+  ],
 };
 
 function formatProfile(axes: AxisEntry[], gaps: GapEntry[]): string {
@@ -129,6 +130,16 @@ function formatCandidates(candidates: Candidate[]): string {
       return `id: ${c.id}\nname: ${c.name}\nvector: ${vec}\ncharacter: ${c.character}\ndistance_rank: ${c.distance_rank}`;
     })
     .join("\n\n");
+}
+
+// ---- Per-stage effort --------------------------------------------------------
+// Claude Opus 5.5 / Sonnet 5 always think (adaptive thinking); `effort` is the
+// control for how much, and so for latency and cost. Override per stage with the
+// env var named at the call site; anything unrecognised falls back to the default.
+type Effort = "low" | "medium" | "high" | "xhigh" | "max";
+const EFFORTS: readonly string[] = ["low", "medium", "high", "xhigh", "max"];
+function effortFrom(value: string | undefined, fallback: Effort): Effort {
+  return value && EFFORTS.includes(value) ? (value as Effort) : fallback;
 }
 
 interface ReqLike {
@@ -176,20 +187,41 @@ export default async function handler(req: ReqLike, res: ResLike): Promise<void>
 
   const client = new Anthropic({ apiKey });
   try {
-    const response = await client.messages.create({
+    // Server-side refusal fallback: if a safety classifier declines the request,
+    // the API re-runs it on Anthropic's recommended model for that category inside
+    // the same call, instead of returning the refusal.
+    const response = await client.beta.messages.create({
       model: process.env.ANTHROPIC_SYNTH_MODEL || DEFAULT_MODEL,
-      max_tokens: 1536,
+      // Thinking counts toward max_tokens, so leave room for it plus the JSON.
+      max_tokens: 16000,
+      betas: ["server-side-fallback-2026-07-01"],
+      fallbacks: "default",
+      output_config: {
+        effort: effortFrom(process.env.ANTHROPIC_SYNTH_EFFORT, DEFAULT_EFFORT),
+        format: { type: "json_schema", schema: DECISION_SCHEMA },
+      },
       system: SYNTHESIS_RULES,
-      tools: [DECISION_TOOL],
-      tool_choice: { type: "tool", name: "record_decision" },
       messages: [{ role: "user", content: userContent }],
     });
-    const toolUse = response.content.find((c) => c.type === "tool_use");
-    if (!toolUse || toolUse.type !== "tool_use") {
+    if (response.stop_reason === "refusal") {
+      res.status(502).json({ error: "Synthesis was declined by the model" });
+      return;
+    }
+    if (response.stop_reason === "max_tokens") {
+      res.status(502).json({ error: "Synthesis ran out of room before finishing" });
+      return;
+    }
+    const text = response.content
+      .map((block) => (block.type === "text" ? block.text : ""))
+      .join("");
+    let decision: unknown;
+    try {
+      decision = JSON.parse(text);
+    } catch {
       res.status(502).json({ error: "Synthesis produced no structured output" });
       return;
     }
-    res.status(200).json({ decision: toolUse.input });
+    res.status(200).json({ decision });
   } catch (err) {
     const detail = err instanceof Error ? err.message : "Unknown error";
     res.status(502).json({ error: "Synthesis failed", detail });

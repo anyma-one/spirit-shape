@@ -15,7 +15,10 @@ import { createHash, timingSafeEqual } from "node:crypto";
 // available"), so no folklore is ever fabricated.
 //
 // Model: strong tier. Override with ANTHROPIC_REPORT_MODEL.
-const DEFAULT_MODEL = "claude-opus-4-8";
+// Effort medium (Opus 5.5's own default, set explicitly): long-form writing from
+// a fixed brief, where more thinking mostly adds wait before the first word.
+const DEFAULT_MODEL = "claude-opus-5-5";
+const DEFAULT_EFFORT = "medium";
 
 // From anyma-tier3-extraction-v3.md MESSAGE 5 (the revised report), with the
 // optional "REAL, SOURCED MYTHOLOGY FOR [ANIMAL]" slot removed per its own
@@ -222,6 +225,21 @@ function buildContext(
   ].join("\n");
 }
 
+// ---- Per-stage effort --------------------------------------------------------
+// Claude Opus 5.5 / Sonnet 5 always think (adaptive thinking); `effort` is the
+// control for how much, and so for latency and cost. Override per stage with the
+// env var named at the call site; anything unrecognised falls back to the default.
+type Effort = "low" | "medium" | "high" | "xhigh" | "max";
+const EFFORTS: readonly string[] = ["low", "medium", "high", "xhigh", "max"];
+function effortFrom(value: string | undefined, fallback: Effort): Effort {
+  return value && EFFORTS.includes(value) ? (value as Effort) : fallback;
+}
+
+// Written into the text stream when a refusal fallback restarts the reply on
+// another model: the client drops everything before it (src/deepdive/pipeline.ts
+// STREAM_RESET — keep the two in sync).
+const STREAM_RESET = "\u001e";
+
 interface ReqLike {
   method?: string;
   headers?: Record<string, string | string[] | undefined>;
@@ -292,16 +310,38 @@ export default async function handler(req: ReqLike, res: ResLike): Promise<void>
 
   const client = new Anthropic({ apiKey });
   try {
-    const stream = client.messages.stream({
+    // Server-side refusal fallback: if a safety classifier declines the request,
+    // the API re-runs it on Anthropic's recommended model for that category inside
+    // the same call, instead of returning the refusal.
+    const stream = client.beta.messages.stream({
       model: process.env.ANTHROPIC_REPORT_MODEL || DEFAULT_MODEL,
-      max_tokens: 4096,
+      // Thinking counts toward max_tokens (its text is not returned), so leave room
+      // for it as well as the reply.
+      max_tokens: 32000,
+      betas: ["server-side-fallback-2026-07-01"],
+      fallbacks: "default",
+      output_config: { effort: effortFrom(process.env.ANTHROPIC_REPORT_EFFORT, DEFAULT_EFFORT) },
       system: REPORT_RULES,
       messages: [{ role: "user", content: userContent }],
     });
+    let wrote = false;
     for await (const event of stream) {
-      if (event.type === "content_block_delta" && event.delta.type === "text_delta") {
+      if (event.type === "content_block_start" && event.content_block.type === "fallback") {
+        // Declined mid-stream: the fallback model starts the reply over.
+        if (wrote) res.write(STREAM_RESET);
+      } else if (event.type === "content_block_delta" && event.delta.type === "text_delta") {
         res.write(event.delta.text);
+        wrote = true;
       }
+    }
+    const final = await stream.finalMessage();
+    if (final.stop_reason === "refusal") {
+      // The whole fallback chain declined.
+      if (!wrote) {
+        res.status(502).json({ error: "The reading was declined by the model" });
+        return;
+      }
+      res.write("\n\n[error] The reading was declined by the model");
     }
     res.end();
   } catch (err) {

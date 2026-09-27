@@ -296,11 +296,7 @@ export function DeepDive({
     setError("");
     setStreaming("");
     try {
-      let acc = "";
-      const full = await streamInterviewTurn(history, (delta) => {
-        acc += delta;
-        setStreaming(acc);
-      });
+      const full = await streamInterviewTurn(history, setStreaming);
       const assistantTurn: ChatTurn = { role: "assistant", content: full };
       const next = [...history, assistantTurn];
       setMessages(next);
@@ -393,7 +389,7 @@ export function DeepDive({
           winner: animalRef(dec.winner_id),
           runnerUp: animalRef(dec.runnerup_id),
         },
-        (delta) => setReport((r) => r + delta),
+        setReport,
       );
       setReportDone(true);
       clearSession(); // the run is complete; don't offer to resume it

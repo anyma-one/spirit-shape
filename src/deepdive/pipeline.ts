@@ -211,11 +211,20 @@ async function safeError(res: Response): Promise<string> {
   }
 }
 
-/** Stream a text/plain response, calling onChunk with each decoded delta. */
+// Sent by the streaming api/deepdive-* functions when a refusal fallback restarts
+// the reply on another model: everything before it is discarded. Keep in sync with
+// STREAM_RESET in api/deepdive-interview.ts and api/deepdive-report.ts.
+const STREAM_RESET = "\u001e";
+
+/**
+ * Stream a text/plain response, calling onText with the full text so far after
+ * each chunk (full text rather than deltas, so a STREAM_RESET can replace what was
+ * already shown). Resolves with the final text.
+ */
 async function streamText(
   url: string,
   body: unknown,
-  onChunk: (delta: string) => void,
+  onText: (textSoFar: string) => void,
 ): Promise<string> {
   const res = await fetch(url, {
     method: "POST",
@@ -227,23 +236,27 @@ async function streamText(
   const reader = res.body.getReader();
   const decoder = new TextDecoder();
   let full = "";
+  const append = (text: string) => {
+    full += text;
+    const reset = full.lastIndexOf(STREAM_RESET);
+    if (reset !== -1) full = full.slice(reset + STREAM_RESET.length);
+  };
   for (;;) {
     const { done, value } = await reader.read();
     if (done) break;
-    const text = decoder.decode(value, { stream: true });
-    full += text;
-    onChunk(text);
+    append(decoder.decode(value, { stream: true }));
+    onText(full);
   }
-  full += decoder.decode();
+  append(decoder.decode());
   return full;
 }
 
 /** One interview turn: send the history, stream the interviewer's next message. */
 export function streamInterviewTurn(
   messages: ChatTurn[],
-  onChunk: (delta: string) => void,
+  onText: (textSoFar: string) => void,
 ): Promise<string> {
-  return streamText("/api/deepdive-interview", { messages }, onChunk);
+  return streamText("/api/deepdive-interview", { messages }, onText);
 }
 
 export async function extract(transcript: string): Promise<ExtractedProfile> {
@@ -281,8 +294,11 @@ export interface ReportInput {
   runnerUp?: AnimalRef;
 }
 
-export function streamReport(input: ReportInput, onChunk: (delta: string) => void): Promise<string> {
-  return streamText("/api/deepdive-report", input, onChunk);
+export function streamReport(
+  input: ReportInput,
+  onText: (textSoFar: string) => void,
+): Promise<string> {
+  return streamText("/api/deepdive-report", input, onText);
 }
 
 /** Fire-and-forget beta log; swallows errors (best-effort analytics). */
