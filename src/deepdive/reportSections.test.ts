@@ -46,7 +46,7 @@ describe("report sectioning", () => {
     expect(r.distillation?.title).toBe("The short version");
     expect(r.sections.map((s) => s.title)).toEqual([
       "At your core",
-      "Where the shape doesn't fit",
+      "Beyond the spirit",
       "You & the world",
       "What challenges you",
       "What you might not be aware of",

@@ -1,6 +1,6 @@
 // DEV ONLY — the #deep-preview result screen's sample reading. A real report from a
 // smoke run on 2026-09-27 (Claude Opus 5.5) for a made-up person, so the preview
-// shows real prose, real section lengths and the "Where the shape doesn't fit"
+// shows real prose, real section lengths and the "Beyond the spirit"
 // section rather than filler. Imported only inside an import.meta.env.DEV branch
 // in DeepDive.tsx, so it never ships. Safe to replace with a newer sample.
 

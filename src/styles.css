@@ -1097,6 +1097,12 @@ body,
   height: 100%;
   object-fit: contain;
   user-select: none;
+  /* The painted card corners have a ~50px radius on the 832×1248 source. Most
+     exports carry them as transparency; honeybee.webp has none (square near-black
+     corners), so clip every card to the same curve. For the transparent ones this
+     sits inside the already-clear corner and changes nothing. The wrapper's glow
+     follows the clipped shape. */
+  border-radius: 6% / 4%;
 }
 /* Float + breathing aura on the primary while it holds focus (bound to primary). */
 .rc-an.rc-settled {

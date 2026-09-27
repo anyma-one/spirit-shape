@@ -25,7 +25,7 @@ import { parseReport, type Block } from "./reportFormat";
  */
 export const SECTION_LABELS = [
   "At your core",
-  "Where the shape doesn't fit",
+  "Beyond the spirit",
   "You & the world",
   "What challenges you",
   "What you might not be aware of",
