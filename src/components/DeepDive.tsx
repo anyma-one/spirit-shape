@@ -197,52 +197,35 @@ export function DeepDive({
   useEffect(() => {
     if (!import.meta.env.DEV) return;
     if (window.location.hash !== "#deep-preview") return;
+    // Roughly the made-up person behind the sample reading (Bear, Cat second nature).
     const axes = [
-      { code: "SOC", score: -2, evidence: "kept to herself", confidence: "high" },
-      { code: "TMP", score: -1, evidence: "waited it out", confidence: "high" },
-      { code: "COG", score: -2, evidence: "worked it through step by step", confidence: "high" },
-      { code: "BND", score: 1, evidence: "held the line", confidence: "medium" },
-      { code: "AUT", score: -1, evidence: "let it go", confidence: "medium" },
-      { code: "REC", score: -2, evidence: "never mentioned it", confidence: "high" },
-      { code: "NOV", score: -1, evidence: "same route every time", confidence: "medium" },
-      { code: "EXP", score: 1, evidence: "writes most evenings", confidence: "medium" },
+      { code: "SOC", score: -2, evidence: "long rides alone", confidence: "high" },
+      { code: "TMP", score: -1, evidence: "slept on it for a week", confidence: "medium" },
+      { code: "COG", score: -1, evidence: "wrote out pros and cons", confidence: "medium" },
+      { code: "BND", score: 2, evidence: "the third time, said so in the meeting", confidence: "high" },
+      { code: "AUT", score: 1, evidence: "the numbers were mine", confidence: "medium" },
+      { code: "REC", score: -1, evidence: "only told people once it worked", confidence: "medium" },
+      { code: "NOV", score: 1, evidence: "took up pottery, loved being a beginner", confidence: "medium" },
+      { code: "EXP", score: -1, evidence: "shows it by fixing things", confidence: "medium" },
     ] as ExtractedProfile["axes"];
     const n = nominate(axes);
     if (!n.ok) return;
     const mockDecision: Decision = {
-      winner_id: "owl",
-      runnerup_id: "tortoise",
+      winner_id: "bear",
+      runnerup_id: "cat",
       distinction: "",
       comparison_notes: "",
       decided_on_low_confidence: false,
     };
     setDecision(mockDecision);
     setMatchResult(toMatchResult(axes, n.ranked, mockDecision));
-    // Mirrors the real report's shape (four parts, a short distillation, three
-    // questions) with model-chosen headings, so the preview exercises the row
-    // grouping and the distillation promotion rather than a simplified stand-in.
-    const filler = (n: number) => "Sample text for layout only. ".repeat(n).trim();
-    setReport(
-      [
-        "## The shape you keep making",
-        `You described the same move three times without noticing: you go quiet, you watch, and you come back with the thing nobody else had put together. **That is the Owl, and it is your evidence, not the Owl's reputation.** ${filler(10)}`,
-        filler(12),
-        "## Where you break the pattern",
-        `${filler(6)} **Where the shape would wait, you speak — and that is your second nature at work.** ${filler(8)}`,
-        "## The self you carry",
-        `${filler(6)} **You experience yourself defending your attention; they experience someone who reliably gives in.** ${filler(8)}`,
-        "## Where it costs you",
-        `${filler(5)} **You will not resolve this by deciding which one is the honest you.** ${filler(9)}`,
-        "## What you have not noticed",
-        `${filler(7)} **Growth is a claim that can never be checked.** ${filler(7)}`,
-        "## In short",
-        "You think before you move.\nYou wait longer than the moment allows.\nYou are not as easy-going as you tell people.",
-        "## Three questions to sit with",
-        "When did you last say the thing at the time?\nWho has seen you angry?\nWhat are you actually waiting for?",
-      ].join("\n\n"),
-    );
-    setReportDone(true);
-    setStage("report");
+    // A real report from a smoke run (made-up person), kept in its own dev-only
+    // module; the dynamic import sits behind the DEV check, so it never ships.
+    void import("../deepdive/previewReport").then((m) => {
+      setReport(m.PREVIEW_REPORT);
+      setReportDone(true);
+      setStage("report");
+    });
   }, []);
 
   // Every stage of the Deep Dive starts at the top of the page — otherwise the
