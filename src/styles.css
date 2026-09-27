@@ -1098,6 +1098,38 @@ body,
   object-fit: contain;
   user-select: none;
 }
+/* Light on the card itself (option C, made fainter at the user's request): a soft
+   inner glow behind the animal, a glowing edge, and a slow sheen sweeping across
+   like light on foil. Screen-blended over the painting and clipped to the card's
+   ~50px corner radius (6% / 4% of the 832×1248 source). */
+.rc-an-sheen {
+  position: absolute;
+  inset: 0;
+  border-radius: 6% / 4%;
+  pointer-events: none;
+  mix-blend-mode: screen;
+  background:
+    linear-gradient(115deg, transparent 30%, rgba(244, 236, 216, 0.38) 45%, rgba(169, 238, 242, 0.18) 52%, transparent 66%) no-repeat,
+    radial-gradient(ellipse 70% 55% at 50% 42%, rgba(244, 236, 216, 0.16), rgba(169, 238, 242, 0.06) 45%, transparent 75%);
+  background-size: 260% 100%, 100% 100%;
+  box-shadow: inset 0 0 30px rgba(169, 238, 242, 0.2);
+  animation: rc-card-sheen 6.5s ease-in-out infinite;
+}
+@keyframes rc-card-sheen {
+  0% {
+    background-position: 130% 0, 0 0;
+  }
+  55%,
+  100% {
+    background-position: -130% 0, 0 0;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .rc-an-sheen {
+    animation: none;
+    background-position: 130% 0, 0 0; /* sheen parked off-card; the glow stays */
+  }
+}
 /* Float + breathing aura on the primary while it holds focus (bound to primary). */
 .rc-an.rc-settled {
   animation: rc-focus-settle 4.6s ease-in-out infinite;

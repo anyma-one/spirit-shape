@@ -101,7 +101,11 @@ export const RevealCarousel = memo(function RevealCarousel({
               // The card is already a finished painting, so it is shown as-is; the
               // controller's glow + blur on the wrapper still follow its alpha (the
               // rounded corners are transparent).
-              <img className="rc-an-card" src={a.card} alt="" draggable={false} />
+              <>
+                <img className="rc-an-card" src={a.card} alt="" draggable={false} />
+                {/* Light on the card itself: a faint inner glow plus a slow sheen. */}
+                <span className="rc-an-sheen" aria-hidden="true" />
+              </>
             ) : (
               <div
                 className="rc-an-fill"

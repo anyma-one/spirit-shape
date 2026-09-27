@@ -196,7 +196,10 @@ export function DeepDive({
 
   useEffect(() => {
     if (!import.meta.env.DEV) return;
-    if (window.location.hash !== "#deep-preview") return;
+    // #deep-preview/<id> (e.g. #deep-preview/dolphin) puts that animal's card in focus.
+    const hash = window.location.hash;
+    if (hash !== "#deep-preview" && !hash.startsWith("#deep-preview/")) return;
+    const focusId = hash.slice("#deep-preview/".length);
     // Roughly the made-up person behind the sample reading (Bear, Cat second nature).
     const axes = [
       { code: "SOC", score: -2, evidence: "long rides alone", confidence: "high" },
@@ -210,9 +213,10 @@ export function DeepDive({
     ] as ExtractedProfile["axes"];
     const n = nominate(axes);
     if (!n.ok) return;
+    const winnerId = focusId && ANIMAL_BY_ID[focusId] ? focusId : "bear";
     const mockDecision: Decision = {
-      winner_id: "bear",
-      runnerup_id: "cat",
+      winner_id: winnerId,
+      runnerup_id: winnerId === "cat" ? "bear" : "cat",
       distinction: "",
       comparison_notes: "",
       decided_on_low_confidence: false,
