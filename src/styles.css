@@ -2910,6 +2910,23 @@ body.no-scroll {
   font-weight: 700;
   color: var(--cream);
 }
+/* The "Deepen the Deep Dive" sign-up at the end of the closing-questions row. */
+.dd-deepen {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--space-4);
+  margin-top: var(--space-6);
+  padding-top: var(--space-6);
+  border-top: 1px solid var(--border-hairline);
+}
+.dd-deepen__text {
+  margin: 0;
+  font-family: var(--font-sans);
+  font-size: var(--text-sm);
+  line-height: var(--leading-normal);
+  color: var(--cream-70);
+}
 /* Shown in "Your reading" until the first section heading streams in. */
 .dd-report__waiting {
   margin: var(--space-4) 0 var(--space-2);

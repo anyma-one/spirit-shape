@@ -1,7 +1,8 @@
 // Client side of the Deep Dive waitlist. Unlike remoteLog (fire-and-forget result
 // logging), this AWAITS the server so the modal can confirm the signup to the user.
 
-export type WaitlistSource = "home-card" | "tier-nav" | "locked" | "nudge" | "link";
+// "deepen" = from the end of a finished Deep Dive: hear when you can go further.
+export type WaitlistSource = "home-card" | "tier-nav" | "locked" | "nudge" | "link" | "deepen";
 
 // "pending" = confirmation email sent, awaiting the click; "already_verified" = they'd
 // confirmed on a previous visit. Both are success; the modal words them differently.

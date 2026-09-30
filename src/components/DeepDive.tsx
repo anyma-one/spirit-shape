@@ -6,6 +6,7 @@ import { structurePartial, structureReport } from "../deepdive/reportSections";
 import { Disclosure } from "./ui/Disclosure";
 import { useSmoothText } from "./ui/useSmoothText";
 import { ShareCard } from "./ShareCard";
+import type { WaitlistSource } from "../persistence/waitlist";
 import { buildCardContent } from "../share/content";
 import { Button } from "./ui/Button";
 import { ANIMAL_BY_ID } from "../data/archetypes";
@@ -82,7 +83,7 @@ export function DeepDive({
   onJoinWaitlist,
 }: {
   onHome: () => void;
-  onJoinWaitlist: () => void;
+  onJoinWaitlist: (source: WaitlistSource) => void;
 }) {
   // A stored code skips the gate; the server re-checks it on every call, and a
   // rejection (code rotated) sends the reader back here via lockOut().
@@ -543,7 +544,7 @@ export function DeepDive({
             </Button>
           </form>
           <div className="dd-intro__actions">
-            <button type="button" className="dd-textlink" onClick={onJoinWaitlist}>
+            <button type="button" className="dd-textlink" onClick={() => onJoinWaitlist("home-card")}>
               No code? Join the waitlist
             </button>
           </div>
@@ -816,6 +817,20 @@ export function DeepDive({
                     status={partial?.writing === section.title ? "writing…" : undefined}
                   >
                     {renderBlocks(section.blocks)}
+                    {/* After the closing questions: the one way forward from a finished
+                        reading. There is no "take it again" - a second run costs money
+                        and weakens the profile - so this is a sign-up for what comes next. */}
+                    {reportDone && i === rows.length - 1 && (
+                      <div className="dd-deepen">
+                        <p className="dd-deepen__text">
+                          Want to go further? We're building a next layer that picks up where this
+                          reading ends.
+                        </p>
+                        <Button variant="luminous" caps onClick={() => onJoinWaitlist("deepen")}>
+                          Deepen the Deep Dive
+                        </Button>
+                      </div>
+                    )}
                   </Disclosure>
                 ))}
               </div>
@@ -918,9 +933,6 @@ export function DeepDive({
             </p>
 
             <div className="dd-intro__actions">
-              <button type="button" className="dd-textlink" onClick={restart}>
-                Take the Deep Dive again
-              </button>
               <button type="button" className="dd-textlink" onClick={onHome}>
                 Back to home
               </button>

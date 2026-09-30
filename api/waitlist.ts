@@ -11,7 +11,22 @@
 
 const SITE_URL = process.env.WAITLIST_SITE_URL ?? "https://www.anyma.one";
 const RESEND_FROM = process.env.WAITLIST_FROM ?? "anyma <hello@anyma.one>";
-const KNOWN_SOURCES = new Set(["home-card", "tier-nav", "locked", "nudge", "link", "unknown"]);
+const KNOWN_SOURCES = new Set(["home-card", "tier-nav", "locked", "nudge", "link", "deepen", "unknown"]);
+
+// "deepen" is a different list in spirit: people who FINISHED the Deep Dive asking to
+// hear when they can go further. Same table (one row per email, so the latest signup
+// sets `source`), but its own confirmation wording.
+function confirmCopy(source: string): { subject: string; line: string } {
+  return source === "deepen"
+    ? {
+        subject: "Confirm: Deepen the Deep Dive",
+        line: "Almost there — please confirm you'd like to hear when you can deepen your Deep Dive.",
+      }
+    : {
+        subject: "Confirm Your Deep Dive Waitlist Signup",
+        line: "Almost there — please confirm you'd like to join the Deep Dive waitlist.",
+      };
+}
 // Conservative: one @, a dot in the domain, no spaces. Mirrors the client guard.
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
@@ -80,11 +95,11 @@ async function sendEmail(opts: {
 
 // HTML confirmation email: the copy + a confirm button + the black anyma wordmark in the
 // footer. Inline styles + light background for broad email-client support.
-function confirmEmailHtml(confirmUrl: string): string {
+function confirmEmailHtml(confirmUrl: string, line: string): string {
   return `<!doctype html>
 <html><body style="margin:0;padding:0;background:#ffffff;">
 <div style="max-width:480px;margin:0 auto;padding:40px 28px;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;color:#211F2A;">
-  <p style="font-size:16px;line-height:1.6;margin:0 0 28px;">Almost there — please confirm you'd like to join the Deep Dive waitlist.</p>
+  <p style="font-size:16px;line-height:1.6;margin:0 0 28px;">${line}</p>
   <p style="margin:0 0 28px;">
     <a href="${confirmUrl}" style="display:inline-block;background:#0A1124;color:#ffffff;text-decoration:none;font-weight:600;font-size:15px;padding:13px 30px;border-radius:999px;">Confirm my spot</a>
   </p>
@@ -164,11 +179,12 @@ export default async function handler(req: ReqLike, res: ResLike): Promise<void>
   // Send the confirmation link to the signer. Required for opt-in, so a failure here IS
   // surfaced (unlike the later inbox ping, which is a convenience).
   const confirmUrl = `${SITE_URL}/api/waitlist-confirm?token=${encodeURIComponent(row.token)}`;
+  const copy = confirmCopy(source);
   const sent = await sendEmail({
     to: email,
-    subject: "Confirm Your Deep Dive Waitlist Signup",
-    text: `Almost there — please confirm you'd like to join the Deep Dive waitlist.\n\nConfirm here:\n${confirmUrl}\n\nIf you didn't request this, you can ignore this email and you won't hear from us again.`,
-    html: confirmEmailHtml(confirmUrl),
+    subject: copy.subject,
+    text: `${copy.line}\n\nConfirm here:\n${confirmUrl}\n\nIf you didn't request this, you can ignore this email and you won't hear from us again.`,
+    html: confirmEmailHtml(confirmUrl, copy.line),
   });
   if (!sent) {
     res.status(502).json({ error: "We couldn't send the confirmation email. Please try again." });

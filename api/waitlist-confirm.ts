@@ -23,6 +23,7 @@ interface ResLike {
 interface WaitlistRow {
   email: string;
   verified: boolean;
+  source?: string | null;
 }
 
 function supabaseConfig(): { url: string; key: string } | null {
@@ -131,7 +132,7 @@ export default async function handler(req: ReqLike, res: ResLike): Promise<void>
   let updated: WaitlistRow[];
   try {
     const r = await fetch(
-      `${cfg.url}/rest/v1/waitlist?${tokenFilter}&verified=eq.false&select=email,verified`,
+      `${cfg.url}/rest/v1/waitlist?${tokenFilter}&verified=eq.false&select=email,verified,source`,
       {
         method: "PATCH",
         headers: supabaseHeaders(cfg.key, "return=representation"),
@@ -151,16 +152,21 @@ export default async function handler(req: ReqLike, res: ResLike): Promise<void>
   if (updated.length > 0) {
     // Freshly confirmed — the real, consented signup: ping the inbox (best effort).
     const email = updated[0].email;
+    // "deepen" = finished the Deep Dive and asked to hear when they can go further.
+    const deepen = updated[0].source === "deepen";
+    const list = deepen ? "Deepen the Deep Dive" : "Deep Dive waitlist";
     await sendEmail({
       to: WAITLIST_TO,
-      subject: `Deep Dive waitlist — confirmed — ${email}`,
-      text: `A Deep Dive waitlist signup was CONFIRMED (double opt-in).\n\nEmail: ${email}\nTime:  ${new Date().toISOString()}`,
+      subject: `${list} — confirmed — ${email}`,
+      text: `A ${list} signup was CONFIRMED (double opt-in).\n\nEmail: ${email}\nTime:  ${new Date().toISOString()}`,
     });
     page(
       res,
       200,
       "You're on the list!",
-      "Thank you for trusting anyma. Your spot on the Deep Dive waitlist is confirmed. We'll email you the moment it goes live.",
+      deepen
+        ? "Thank you for trusting anyma. You're confirmed, and we'll email you when you can deepen your Deep Dive."
+        : "Thank you for trusting anyma. Your spot on the Deep Dive waitlist is confirmed. We'll email you the moment it goes live.",
     );
     return;
   }

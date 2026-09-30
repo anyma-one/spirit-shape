@@ -187,7 +187,7 @@ export default function App() {
       break;
 
     case "deepdive":
-      screenEl = <DeepDive onHome={goHome} onJoinWaitlist={() => openWaitlist("home-card")} />;
+      screenEl = <DeepDive onHome={goHome} onJoinWaitlist={openWaitlist} />;
       break;
   }
 
