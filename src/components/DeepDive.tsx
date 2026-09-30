@@ -781,11 +781,17 @@ export function DeepDive({
               writes it as "the version someone screenshots and remembers", which only
               works if they reach it. Found by shape, not heading text - see
               deepdive/reportSections.ts. */}
-          {distillation && (
+          {/* Shown from the start, holding its space: the model writes this fifth,
+              and a panel that appeared only then pushed the whole reading down. */}
+          {(distillation || !reportDone) && (
             <section className="panel dd-short">
-              <p className="section-label">{distillation.title || "The short version"}</p>
-              <article className="dd-report__body sa-reading">
-                {renderBlocks(distillation.blocks)}
+              <p className="section-label">{distillation?.title || "The short version"}</p>
+              <article className="dd-report__body sa-reading dd-short__body">
+                {distillation ? (
+                  renderBlocks(distillation.blocks)
+                ) : (
+                  <p className="dd-short__pending">Distilled once your reading is written…</p>
+                )}
               </article>
             </section>
           )}

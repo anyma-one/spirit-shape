@@ -2833,6 +2833,30 @@ body.no-scroll {
 .dd-short .dd-report__p:last-child {
   margin-bottom: 0;
 }
+/* Reserve the finished distillation's height (four lines; about eight on a phone,
+   where they wrap) so it fills in without moving anything below it. */
+.dd-short__body {
+  min-height: calc(4 * var(--leading-normal) * var(--text-lg) + 3 * var(--space-3));
+}
+@media (max-width: 480px) {
+  .dd-short__body {
+    min-height: calc(8 * var(--leading-normal) * var(--text-lg) + 3 * var(--space-3));
+  }
+}
+.dd-short__pending {
+  margin: 0;
+  font-family: var(--font-display);
+  font-style: italic;
+  font-size: var(--text-lg);
+  line-height: var(--leading-normal);
+  color: var(--cream-45);
+  animation: dd-pulse 1.8s ease-in-out infinite;
+}
+@media (prefers-reduced-motion: reduce) {
+  .dd-short__pending {
+    animation: none;
+  }
+}
 
 /* The reading sits on the same night panel as the origin and symbolic boxes, so the
    result page reads as one set of surfaces rather than a parchment insert. (It was
