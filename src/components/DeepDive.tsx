@@ -1,9 +1,10 @@
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Layout } from "./ui/Layout";
 import { Loading } from "./Loading";
-import { parseReport, type Block, type Segment } from "../deepdive/reportFormat";
-import { structureReport } from "../deepdive/reportSections";
+import type { Block, Segment } from "../deepdive/reportFormat";
+import { structurePartial, structureReport } from "../deepdive/reportSections";
 import { Disclosure } from "./ui/Disclosure";
+import { useSmoothText } from "./ui/useSmoothText";
 import { ShareCard } from "./ShareCard";
 import { buildCardContent } from "../share/content";
 import { Button } from "./ui/Button";
@@ -53,6 +54,14 @@ import {
 // code is stored on this device (see deepdive/access.ts).
 type Stage = "locked" | "intro" | "interview" | "processing" | "report" | "error";
 
+// The loading screen's status lines, shown one after another (12s each, holding on
+// the last) while extract + synthesis run — about 45s in the smoke runs.
+const DEEP_LOADING_LINES = [
+  "Receiving your thoughts and feelings…",
+  "Weaving the pattern of your personality…",
+  "Tracing the shape of your spirit…",
+];
+
 function animalRef(id: string): AnimalRef | undefined {
   const a = ANIMAL_BY_ID[id];
   return a ? { id: a.id, name: a.name, note: a.note } : undefined;
@@ -88,7 +97,6 @@ export function DeepDive({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string>("");
 
-  const [processingStep, setProcessingStep] = useState("Reading your answers");
   const [decision, setDecision] = useState<Decision | null>(null);
   // The Tier-3 output in MatchResult shape, so the result screen can use the same
   // furniture as Tiers 1-2. Null if the decided animals aren't in the shared
@@ -100,10 +108,13 @@ export function DeepDive({
   const [reaction, setReaction] = useState<number | null>(null);
 
   const scrollRef = useRef<HTMLDivElement>(null);
+  const composeRef = useRef<HTMLFormElement>(null);
+  // Follow the conversation as it grows, unless the reader has scrolled up to reread.
+  const followRef = useRef(true);
+  // The interviewer's in-flight reply, eased in rather than shown in network bursts.
+  const smoothStreaming = useSmoothText(stripTranscriptBlock(streaming));
   const startedRef = useRef(false);
 
-  // The live pipeline step, as the loading screen's single (re-fading) status line.
-  const processingLines = useMemo(() => [`${processingStep}…`], [processingStep]);
 
   // --- result furniture -------------------------------------------------------
   // Tier 3 renders through the same components as Tiers 1-2. These are memoised
@@ -196,9 +207,16 @@ export function DeepDive({
 
   useEffect(() => {
     if (!import.meta.env.DEV) return;
-    // #deep-preview/<id> (e.g. #deep-preview/dolphin) puts that animal's card in focus.
+    //   #deep-preview/<id>    that animal's card in focus (e.g. #deep-preview/dolphin)
+    //   #deep-preview-stream  the sample reading typed in as if streaming
+    //   #deep-preview-loading the loading screen, left running
     const hash = window.location.hash;
-    if (hash !== "#deep-preview" && !hash.startsWith("#deep-preview/")) return;
+    if (hash === "#deep-preview-loading") {
+      setStage("processing");
+      return;
+    }
+    const streamIt = hash === "#deep-preview-stream";
+    if (hash !== "#deep-preview" && !hash.startsWith("#deep-preview/") && !streamIt) return;
     const focusId = hash.slice("#deep-preview/".length);
     // Roughly the made-up person behind the sample reading (Bear, Cat second nature).
     const axes = [
@@ -225,11 +243,24 @@ export function DeepDive({
     setMatchResult(toMatchResult(axes, n.ranked, mockDecision));
     // A real report from a smoke run (made-up person), kept in its own dev-only
     // module; the dynamic import sits behind the DEV check, so it never ships.
+    let timer = 0;
     void import("../deepdive/previewReport").then((m) => {
-      setReport(m.PREVIEW_REPORT);
-      setReportDone(true);
       setStage("report");
+      if (!streamIt) {
+        setReport(m.PREVIEW_REPORT);
+        setReportDone(true);
+        return;
+      }
+      // A thinking pause, then ~40 characters every 50ms, like a real stream.
+      let at = 0;
+      timer = window.setTimeout(function tick() {
+        at = Math.min(at + 40, m.PREVIEW_REPORT.length);
+        setReport(m.PREVIEW_REPORT.slice(0, at));
+        if (at < m.PREVIEW_REPORT.length) timer = window.setTimeout(tick, 50);
+        else setReportDone(true);
+      }, 3000);
     });
+    return () => window.clearTimeout(timer);
   }, []);
 
   // Every stage of the Deep Dive starts at the top of the page — otherwise the
@@ -243,10 +274,29 @@ export function DeepDive({
     document.querySelector<HTMLElement>(".app")?.scrollTo(0, 0);
   }, [stage]);
 
-  // Keep the transcript scrolled to the latest turn.
+  // Keep the latest turn in view, just above the sticky compose bar. The WINDOW is
+  // what scrolls on this page (.dd-chat__scroll never overflows - see styles.css),
+  // so scrolling that element did nothing and readers had to scroll by hand.
+  // How far the end of the conversation sits below the top of the compose bar.
+  const overflowBelowCompose = () => {
+    const end = scrollRef.current?.getBoundingClientRect().bottom;
+    const composeTop = composeRef.current?.getBoundingClientRect().top;
+    return end === undefined || composeTop === undefined ? 0 : end - composeTop;
+  };
   useEffect(() => {
-    scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight });
-  }, [messages, streaming]);
+    if (stage !== "interview") return;
+    // Scrolling well up to reread pauses following; coming back down resumes it.
+    const onScroll = () => {
+      followRef.current = overflowBelowCompose() < 200;
+    };
+    window.addEventListener("scroll", onScroll, { passive: true });
+    return () => window.removeEventListener("scroll", onScroll);
+  }, [stage]);
+  useEffect(() => {
+    if (stage !== "interview" || !followRef.current) return;
+    const overflow = overflowBelowCompose();
+    if (overflow > 0) window.scrollBy({ top: overflow });
+  }, [stage, messages, smoothStreaming, busy, error]);
 
   // The server rejected the stored code (e.g. it was rotated). Forget it and return
   // to the gate. The interview transcript stays saved, so it resumes after unlock.
@@ -296,7 +346,9 @@ export function DeepDive({
       setStreaming("");
       persist(next, id);
       if (isInterviewComplete(full)) {
-        void finishInterview(next, id);
+        // Leave the closing lines ("give me a moment…") on screen long enough to
+        // read; the pipeline starts now, only the switch to the loading screen waits.
+        void finishInterview(next, id, 2500);
       }
     } catch (err) {
       if (err instanceof AccessDeniedError) return lockOut();
@@ -333,6 +385,7 @@ export function DeepDive({
     const text = input.trim();
     if (!text || busy) return;
     const next: ChatTurn[] = [...messages, { role: "user", content: text }];
+    followRef.current = true; // sending always brings the conversation back into view
     setMessages(next);
     setInput("");
     persist(next, runId);
@@ -341,16 +394,19 @@ export function DeepDive({
 
   // --- processing (extract -> nominate -> synthesize -> report) --------------
 
-  async function finishInterview(finalMessages: ChatTurn[], id: string) {
-    setStage("processing");
+  async function finishInterview(finalMessages: ChatTurn[], id: string, revealDelayMs = 0) {
+    if (revealDelayMs > 0) {
+      // Only move on if nothing else has (an early error or result wins).
+      window.setTimeout(() => setStage((s) => (s === "interview" ? "processing" : s)), revealDelayMs);
+    } else {
+      setStage("processing");
+    }
     setBusy(true);
     try {
       const transcript = buildTranscript(finalMessages);
 
-      setProcessingStep("Reading your answers");
       const profile: ExtractedProfile = await extract(transcript);
 
-      setProcessingStep("Finding your shape");
       const nomination = nominate(profile.axes);
       if (!nomination.ok) {
         setError(
@@ -360,7 +416,6 @@ export function DeepDive({
         return;
       }
 
-      setProcessingStep("Deciding");
       const dec = await synthesize(profile.axes, profile.gaps, nomination.candidates);
       setDecision(dec);
       setMatchResult(toMatchResult(profile.axes, nomination.ranked, dec));
@@ -377,7 +432,6 @@ export function DeepDive({
       // Stream the report.
       setStage("report");
       setBusy(false);
-      setProcessingStep("Writing your reading");
       await streamReport(
         {
           transcript,
@@ -550,12 +604,13 @@ export function DeepDive({
                 {m.role === "assistant" ? stripTranscriptBlock(m.content).trim() : m.content}
               </div>
             ))}
-            {streaming && <div className="dd-msg dd-msg--assistant">{stripTranscriptBlock(streaming).trim()}</div>}
-            {busy && !streaming && <div className="dd-msg dd-msg--assistant dd-msg--typing">…</div>}
+            {smoothStreaming.trim() && <div className="dd-msg dd-msg--assistant">{smoothStreaming.trim()}</div>}
+            {busy && !smoothStreaming.trim() && <div className="dd-msg dd-msg--assistant dd-msg--typing">…</div>}
             {error && <div className="dd-error">{error} <button className="dd-textlink" onClick={() => runInterviewTurn(messages, runId)}>Retry</button></div>}
           </div>
 
           <form
+            ref={composeRef}
             className="dd-compose"
             onSubmit={(e) => {
               e.preventDefault();
@@ -622,8 +677,10 @@ export function DeepDive({
       <Loading
         tier="deep"
         kicker="Reading your Deep Dive"
-        lines={processingLines}
-        sub="Reading closely. This takes a moment."
+        lines={DEEP_LOADING_LINES}
+        lineMs={12000}
+        holdLast
+        sub="Examining closely. This takes a moment."
       />
     );
   }
@@ -674,14 +731,12 @@ export function DeepDive({
   // While the report streams, it renders as one live column - watching it write is
   // part of the moment, and sections cannot be grouped from half a heading anyway.
   // It reorganises into rows once the stream closes.
-  const streamingReading = (
-    <article className="dd-report__body sa-reading">
-      {renderBlocks(parseReport(report))}
-      <p className="dd-report__p dd-report__cursor">▍</p>
-    </article>
-  );
-
+  // Finished: the full structure. Still streaming: the same rows, filling in (see
+  // structurePartial), so nothing opens and then snaps shut when the report ends.
   const structured = reportDone ? structureReport(report) : null;
+  const partial = reportDone ? null : structurePartial(report);
+  const rows = structured?.sections ?? partial?.sections ?? [];
+  const distillation = structured?.distillation ?? partial?.distillation ?? null;
 
   return (
     <Layout header={{ tier: "deep", showBack: true, onBack: onHome, onHome }}>
@@ -711,11 +766,11 @@ export function DeepDive({
               writes it as "the version someone screenshots and remembers", which only
               works if they reach it. Found by shape, not heading text - see
               deepdive/reportSections.ts. */}
-          {structured?.distillation && (
+          {distillation && (
             <section className="panel dd-short">
-              <p className="section-label">{structured.distillation.title || "The short version"}</p>
+              <p className="section-label">{distillation.title || "The short version"}</p>
               <article className="dd-report__body sa-reading">
-                {renderBlocks(structured.distillation.blocks)}
+                {renderBlocks(distillation.blocks)}
               </article>
             </section>
           )}
@@ -725,22 +780,27 @@ export function DeepDive({
               already open. */}
           <section className="panel">
             <p className="section-label">Your reading</p>
-            {structured ? (
+            {rows.length > 0 ? (
               <div className="dd-report__body sa-reading">
-                {structured.lead.length > 0 && <div>{renderBlocks(structured.lead)}</div>}
+                {structured && structured.lead.length > 0 && <div>{renderBlocks(structured.lead)}</div>}
                 {/* Everything starts collapsed (user's call, after seeing real output:
                     "At your core" runs ~490 words, which open by default filled a screen
                     and a half before the reader reached any other row). Collapsed, the
                     whole result — carousel, distillation and a nine-row index — sits in
                     about 1,900px. */}
-                {structured.sections.map((section, i) => (
-                  <Disclosure key={`${section.title}-${i}`} title={section.title}>
+                {rows.map((section, i) => (
+                  <Disclosure
+                    key={`${section.title}-${i}`}
+                    title={section.title}
+                    status={partial?.writing === section.title ? "writing…" : undefined}
+                  >
                     {renderBlocks(section.blocks)}
                   </Disclosure>
                 ))}
               </div>
             ) : (
-              streamingReading
+              // The model thinks before its first word (~15s): say so, quietly.
+              <p className="dd-report__waiting">Writing your reading…</p>
             )}
           </section>
 

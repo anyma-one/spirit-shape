@@ -126,3 +126,39 @@ export function structureReport(text: string): StructuredReport {
 
   return { lead, sections, distillation };
 }
+
+export interface PartialReport {
+  /** Rows so far, labelled as the finished report will be (same titles, same order). */
+  sections: ReportSection[];
+  /** The distillation, once the model has moved past it. */
+  distillation: ReportSection | null;
+  /** Title of the row still being written, or null before the first heading arrives. */
+  writing: string | null;
+}
+
+/**
+ * The report WHILE it streams, shaped like the finished one, so the result page can
+ * show the same collapsed rows from the start and fill them in, instead of a live
+ * column that snaps into rows at the end (readers saw "At your core" open and then
+ * close). Labels are assigned by position exactly as structureReport does on the
+ * happy path, so the rows keep their titles, order and open state when it finishes.
+ */
+export function structurePartial(text: string): PartialReport {
+  const all = splitSections(parseReport(text)).sections;
+  // Drop empty headings (a title line), except the last: that one just started.
+  const sections = all.filter((s, i) => s.blocks.length > 0 || i === all.length - 1);
+  if (sections.length === 0) return { sections: [], distillation: null, writing: null };
+
+  const pinned = sections.length <= SECTION_LABELS.length;
+  const labelled = sections.map((s, i) => (pinned ? { ...s, title: SECTION_LABELS[i] } : s));
+  const writing = labelled[labelled.length - 1].title;
+
+  // The distillation is promoted to its own panel, so it never shows as a row - and
+  // the panel appears only once it is complete (the model has moved on).
+  let distillation: ReportSection | null = null;
+  if (pinned && labelled.length > DISTILLATION_INDEX) {
+    const [d] = labelled.splice(DISTILLATION_INDEX, 1);
+    if (labelled.length > DISTILLATION_INDEX) distillation = d;
+  }
+  return { sections: labelled, distillation, writing };
+}

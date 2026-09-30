@@ -24,6 +24,8 @@ export function Loading({
   lines = LINES,
   kicker = "Channeling your voice",
   sub,
+  lineMs = LINE_MS,
+  holdLast = false,
 }: {
   /** A quiz tier, or "deep" for the Deep Dive's own mood scope. */
   tier: TierId | "deep";
@@ -34,6 +36,10 @@ export function Loading({
   kicker?: string;
   /** Optional second line under the status copy. */
   sub?: string;
+  /** How long each status line shows. */
+  lineMs?: number;
+  /** Stop on the last line instead of looping (for a sequence that reads as progress). */
+  holdLast?: boolean;
 }) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [lineIndex, setLineIndex] = useState(0);
@@ -54,9 +60,17 @@ export function Loading({
   useEffect(() => {
     const count = linesKey.split("|").length;
     if (count < 2) return;
-    const textTimer = window.setInterval(() => setLineIndex((i) => (i + 1) % count), LINE_MS);
+    const textTimer = window.setInterval(
+      () =>
+        setLineIndex((i) => {
+          if (!holdLast) return (i + 1) % count;
+          if (i + 1 >= count - 1) window.clearInterval(textTimer);
+          return Math.min(i + 1, count - 1);
+        }),
+      lineMs,
+    );
     return () => window.clearInterval(textTimer);
-  }, [linesKey]);
+  }, [linesKey, lineMs, holdLast]);
 
   useEffect(() => {
     if (!onDone) return; // indeterminate: no hand-off, keep looping

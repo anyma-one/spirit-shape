@@ -2757,6 +2757,20 @@ body.no-scroll {
 .disclose__btn:hover .disclose__label {
   opacity: 0.75;
 }
+/* Keeps the label left and the mark right when a status note sits between them. */
+.disclose__label {
+  margin-right: auto;
+}
+/* "writing…" beside the row the report is still streaming into. */
+.disclose__status {
+  flex: none;
+  font-family: var(--font-sans);
+  font-size: var(--text-xs);
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--cream-45);
+  animation: dd-pulse 1.8s ease-in-out infinite;
+}
 /* A plus that becomes a minus. Cheaper to read at a glance than a rotating chevron.
    Carries the turquoise accent — the app's interactive voice — so the one affordance
    on an otherwise still page reads as clickable. */
@@ -2872,12 +2886,29 @@ body.no-scroll {
   font-weight: 700;
   color: var(--cream);
 }
-.dd-report__cursor {
+/* Shown in "Your reading" until the first section heading streams in. */
+.dd-report__waiting {
+  margin: var(--space-4) 0 var(--space-2);
+  font-family: var(--font-display);
+  font-style: italic;
+  font-size: var(--text-lg);
   color: var(--cream-45);
-  animation: dd-blink 1s steps(2) infinite;
+  animation: dd-pulse 1.8s ease-in-out infinite;
 }
-@keyframes dd-blink {
-  50% { opacity: 0; }
+@keyframes dd-pulse {
+  0%,
+  100% {
+    opacity: 0.45;
+  }
+  50% {
+    opacity: 1;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .disclose__status,
+  .dd-report__waiting {
+    animation: none;
+  }
 }
 /* Footer sits on the night sky (outside the parchment reading), so it takes the
    cream palette the other tiers' result footers use. */

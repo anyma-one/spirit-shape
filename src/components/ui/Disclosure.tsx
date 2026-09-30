@@ -11,10 +11,13 @@ export function Disclosure({
   title,
   children,
   defaultOpen = false,
+  status,
 }: {
   title: string;
   children: ReactNode;
   defaultOpen?: boolean;
+  /** A quiet note beside the title, e.g. "writing…" while the report streams. */
+  status?: string;
 }) {
   const [open, setOpen] = useState(defaultOpen);
   const id = useId();
@@ -30,6 +33,7 @@ export function Disclosure({
           onClick={() => setOpen((v) => !v)}
         >
           <span className="disclose__label">{title}</span>
+          {status && <span className="disclose__status">{status}</span>}
           <span className="disclose__mark" aria-hidden="true" />
         </button>
       </h3>

@@ -9,8 +9,12 @@ import { createHash, timingSafeEqual } from "node:crypto";
 //
 // The driver runs the whole interview from one system prompt: it asks ONE
 // question, the client sends the person's answer back as the next user turn,
-// and so on, until the model emits a `TRANSCRIPT — pass to extraction` block
+// and so on, until the model emits the `TRANSCRIPT — pass to extraction` line
 // and stops. The client detects that marker to end the interview.
+// The marker is a bare line on purpose (changed 2026-09-30): the driver used to
+// copy every Q/A after it, which nothing read — the client builds the transcript
+// from the real turns (buildTranscript) — so the reader sat looking at the closing
+// line while that hidden copy was generated, and paid for it.
 //
 // Model: the driver runs the whole interview. Config lives in env (see
 // .env.example — the single source of truth for per-stage models); this constant
@@ -147,11 +151,10 @@ ONE QUESTION AT A TIME. Never two on screen. Ask, wait, decide the next.
        feel tested or scored — just heard.
      - CAP: push any one dimension or gap toward a concrete instance at most TWICE, then move on.
 
-6. CLOSE. One warm, brief line that you have enough. Then output exactly this, nothing after:
+6. CLOSE. One warm, brief line that you have enough. Then, on its own line, ask them to wait
+   a moment while their reading is prepared (for example: "Give me a moment while I put your
+   reading together."). Then output exactly this one line, and nothing after it:
      TRANSCRIPT — pass to extraction
-     Q: <question, verbatim>
-     A: <their answer>
-     (…every exchange, in order…)
 
 ANTI-ANCHORING. If a prior-tier (non-Deep-Dive) result is loaded, use it only to choose which
 dimensions to probe harder, never to decide anything, and never mention it.`;

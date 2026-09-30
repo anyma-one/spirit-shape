@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { splitSections, structureReport } from "./reportSections";
+import { splitSections, structurePartial, structureReport } from "./reportSections";
 import { parseReport } from "./reportFormat";
 
 // Headings here are deliberately NOT the prompt's brief names: the report model picks
@@ -120,5 +120,41 @@ describe("report sectioning", () => {
     expect(r.sections).toEqual([]);
     expect(r.distillation).toBeNull();
     expect(r.lead).toHaveLength(1);
+  });
+});
+
+describe("report while streaming", () => {
+  // REPORT cut off partway through a section, as the stream delivers it.
+  const upTo = (heading: string, extra = "") => REPORT.slice(0, REPORT.indexOf(heading)) + heading + extra;
+
+  it("shows nothing before the first heading arrives", () => {
+    expect(structurePartial("")).toEqual({ sections: [], distillation: null, writing: null });
+  });
+
+  it("labels rows as the finished report will, and names the one being written", () => {
+    const p = structurePartial(upTo("## The self you carry", "\n\nYou describe"));
+    expect(p.sections.map((s) => s.title)).toEqual(["At your core", "Beyond the spirit", "You & the world"]);
+    expect(p.writing).toBe("You & the world");
+  });
+
+  it("keeps the distillation out of the rows and only surfaces it once complete", () => {
+    const writingIt = structurePartial(upTo("## In short", "\n\nYou think before you move."));
+    expect(writingIt.distillation).toBeNull();
+    expect(writingIt.sections.map((s) => s.title)).not.toContain("The short version");
+    const pastIt = structurePartial(upTo("## Three questions to sit with"));
+    expect(pastIt.distillation?.title).toBe("The short version");
+    expect(pastIt.sections.at(-1)?.title).toBe("Three questions to go deeper");
+  });
+
+  it("ends with the same rows the finished report shows", () => {
+    const done = structureReport(REPORT);
+    const partial = structurePartial(REPORT);
+    expect(partial.sections.map((s) => s.title)).toEqual(done.sections.map((s) => s.title));
+    expect(partial.distillation?.title).toBe(done.distillation?.title);
+  });
+
+  it("ignores a title heading once the real first section starts", () => {
+    const p = structurePartial("# The Owl\n\n## The shape you keep making\n\nYou go quiet.");
+    expect(p.sections.map((s) => s.title)).toEqual(["At your core"]);
   });
 });

@@ -66,7 +66,11 @@ export interface ChatTurn {
 // Pure helpers
 // ---------------------------------------------------------------------------
 
-/** The driver's completion marker (also the header of its self-reported block). */
+/**
+ * The driver's completion marker. It now ends the reply on its own; older runs
+ * (and a model that ignores the prompt) may still follow it with a self-reported
+ * Q/A block, which stripTranscriptBlock drops.
+ */
 export const TRANSCRIPT_MARKER = "TRANSCRIPT — pass to extraction";
 
 export function isInterviewComplete(assistantText: string): boolean {
