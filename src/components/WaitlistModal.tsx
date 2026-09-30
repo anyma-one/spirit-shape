@@ -23,8 +23,8 @@ const COPY = {
   },
   deepen: {
     label: "Sign up to deepen the Deep Dive",
-    eyebrow: "Deepen the Deep Dive",
-    title: "Go Further From Here",
+    eyebrow: "",
+    title: "Deepen The Deep Dive",
     lede: "We're building a next layer that picks up where this reading ends. Leave your email and we'll let you know when you can deepen your Deep Dive.",
     call: "Be one of the first to go further.",
     button: "Sign me up",
@@ -98,7 +98,7 @@ export function WaitlistModal({
           </div>
         ) : (
           <>
-            <span className="waitlist__eyebrow">{copy.eyebrow}</span>
+            {copy.eyebrow && <span className="waitlist__eyebrow">{copy.eyebrow}</span>}
             <h2 className="waitlist__title">{copy.title}</h2>
             <p className="waitlist__lede">{copy.lede}</p>
             <p className="waitlist__call">{copy.call}</p>

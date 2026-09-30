@@ -39,7 +39,10 @@ import {
 } from "../deepdive/pipeline";
 import {
   clearSession,
+  loadReading,
   loadSession,
+  saveReading,
+  saveReadingReaction,
   newRunId,
   saveSession,
 } from "../deepdive/session";
@@ -93,26 +96,39 @@ export function DeepDive({
   const [demo] = useState(
     () => (import.meta.env.DEV || __PREVIEW_TOOLS__) && window.location.hash === "#deep-demo",
   );
-  const [stage, setStage] = useState<Stage>(() => (demo || loadPasscode() ? "intro" : "locked"));
+  // One Deep Dive per device: a finished reading is kept (deepdive/session.ts) and
+  // shown again instead of a new interview. The preview tools never read or write it.
+  const [saved] = useState(() =>
+    (import.meta.env.DEV || __PREVIEW_TOOLS__) && window.location.hash.startsWith("#deep-")
+      ? null
+      : loadReading(),
+  );
+  const [stage, setStage] = useState<Stage>(() =>
+    saved ? "report" : demo || loadPasscode() ? "intro" : "locked",
+  );
   const [passcode, setPasscode] = useState("");
   const [unlocking, setUnlocking] = useState(false);
   const [lockMessage, setLockMessage] = useState("");
-  const [runId, setRunId] = useState<string>("");
+  const [runId, setRunId] = useState<string>(saved?.runId ?? "");
   const [messages, setMessages] = useState<ChatTurn[]>([]);
   const [streaming, setStreaming] = useState<string>(""); // in-flight interviewer turn
   const [input, setInput] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string>("");
 
-  const [decision, setDecision] = useState<Decision | null>(null);
+  const [decision, setDecision] = useState<Decision | null>(saved?.decision ?? null);
   // The Tier-3 output in MatchResult shape, so the result screen can use the same
   // furniture as Tiers 1-2. Null if the decided animals aren't in the shared
   // library — the screen then falls back to the reading alone.
-  const [matchResult, setMatchResult] = useState<MatchResult | null>(null);
+  const [matchResult, setMatchResult] = useState<MatchResult | null>(() => {
+    if (!saved) return null;
+    const n = nominate(saved.axes);
+    return n.ok ? toMatchResult(saved.axes, n.ranked, saved.decision) : null;
+  });
   const [focus, setFocus] = useState<FocusKey>("primary");
-  const [report, setReport] = useState("");
-  const [reportDone, setReportDone] = useState(false);
-  const [reaction, setReaction] = useState<number | null>(null);
+  const [report, setReport] = useState(saved?.report ?? "");
+  const [reportDone, setReportDone] = useState(!!saved);
+  const [reaction, setReaction] = useState<number | null>(saved?.reaction ?? null);
 
   const scrollRef = useRef<HTMLDivElement>(null);
   const composeRef = useRef<HTMLFormElement>(null);
@@ -448,7 +464,7 @@ export function DeepDive({
       // Stream the report.
       setStage("report");
       setBusy(false);
-      await (await api()).streamReport(
+      const finalReport = await (await api()).streamReport(
         {
           transcript,
           axes: profile.axes,
@@ -463,6 +479,17 @@ export function DeepDive({
       );
       setReportDone(true);
       clearSession(); // the run is complete; don't offer to resume it
+      // Keep the finished reading: opening the Deep Dive again shows it, not a new run.
+      if (!demo) {
+        saveReading({
+          runId: id,
+          finishedAt: new Date().toISOString(),
+          axes: profile.axes,
+          decision: dec,
+          report: finalReport,
+          reaction: null,
+        });
+      }
     } catch (err) {
       if (err instanceof AccessDeniedError) return lockOut();
       setError(err instanceof Error ? err.message : "Something went wrong generating your reading.");
@@ -475,7 +502,10 @@ export function DeepDive({
   function chooseReaction(n: number) {
     if (reaction !== null) return;
     setReaction(n);
-    if (runId && !demo) logReaction(runId, n);
+    if (runId && !demo) {
+      logReaction(runId, n);
+      saveReadingReaction(n);
+    }
   }
 
   function restart() {
@@ -823,10 +853,10 @@ export function DeepDive({
                     {reportDone && i === rows.length - 1 && (
                       <div className="dd-deepen">
                         <p className="dd-deepen__text">
-                          Want to go further? We're building a next layer that picks up where this
-                          reading ends.
+                          You don't want to sit, you want to explore? We are building the next
+                          layer that lets you move a few stages deeper.
                         </p>
-                        <Button variant="luminous" caps onClick={() => onJoinWaitlist("deepen")}>
+                        <Button variant="ghost" size="sm" caps onClick={() => onJoinWaitlist("deepen")}>
                           Deepen the Deep Dive
                         </Button>
                       </div>
