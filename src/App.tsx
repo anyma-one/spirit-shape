@@ -50,7 +50,8 @@ export default function App() {
     // #deep-preview-chat straight to the interview, both seeded from fixtures in
     // DeepDive.tsx — no interview, no API spend. Statically false in a production
     // build, so Rollup drops it. Safe to delete.
-    import.meta.env.DEV && window.location.hash.startsWith("#deep-preview")
+    (import.meta.env.DEV || __PREVIEW_TOOLS__) &&
+    (window.location.hash.startsWith("#deep-preview") || window.location.hash === "#deep-demo")
       ? { name: "deepdive" }
       : { name: "home" },
   );

@@ -86,7 +86,13 @@ export function DeepDive({
 }) {
   // A stored code skips the gate; the server re-checks it on every call, and a
   // rejection (code rotated) sends the reader back here via lockOut().
-  const [stage, setStage] = useState<Stage>(() => (loadPasscode() ? "intro" : "locked"));
+  // PREVIEW TOOLS: #deep-demo runs the whole flow on canned responses (deepdive/demo.ts)
+  // - no passcode, no API spend, nothing saved or logged. The guard is a build-time
+  // constant, so production builds contain none of it.
+  const [demo] = useState(
+    () => (import.meta.env.DEV || __PREVIEW_TOOLS__) && window.location.hash === "#deep-demo",
+  );
+  const [stage, setStage] = useState<Stage>(() => (demo || loadPasscode() ? "intro" : "locked"));
   const [passcode, setPasscode] = useState("");
   const [unlocking, setUnlocking] = useState(false);
   const [lockMessage, setLockMessage] = useState("");
@@ -164,7 +170,15 @@ export function DeepDive({
   const noUnlock = useCallback(() => {}, []);
 
   // Resume a saved interview if one exists (offered on the intro screen).
-  const [resumable] = useState(() => loadSession());
+  const [resumable] = useState(() => (demo ? null : loadSession()));
+
+  // The four network calls; canned in the demo run.
+  async function api() {
+    if ((import.meta.env.DEV || __PREVIEW_TOOLS__) && demo) {
+      return (await import("../deepdive/demo")).demoApi;
+    }
+    return { streamInterviewTurn, extract, synthesize, streamReport };
+  }
 
   // --- DEV ONLY: render Tier-3 screens without spending an interview ----------
   //   #deep-preview       the result screen, seeded from a fixed profile
@@ -173,7 +187,7 @@ export function DeepDive({
   // build, so Rollup drops both blocks from the shipped bundle (verified: none of
   // the sample text appears in dist/). Safe to delete outright.
   useEffect(() => {
-    if (!import.meta.env.DEV) return;
+    if (!(import.meta.env.DEV || __PREVIEW_TOOLS__)) return;
     if (window.location.hash !== "#deep-preview-chat") return;
     // A mid-interview moment rather than the first question: long assistant turns,
     // a short user reply and a long one, so the styling is judged on the shapes it
@@ -206,7 +220,7 @@ export function DeepDive({
   }, []);
 
   useEffect(() => {
-    if (!import.meta.env.DEV) return;
+    if (!(import.meta.env.DEV || __PREVIEW_TOOLS__)) return;
     //   #deep-preview/<id>    that animal's card in focus (e.g. #deep-preview/dolphin)
     //   #deep-preview-stream  the sample reading typed in as if streaming
     //   #deep-preview-loading the loading screen, left running
@@ -329,6 +343,7 @@ export function DeepDive({
   }
 
   function persist(next: ChatTurn[], id: string) {
+    if (demo) return;
     saveSession({ runId: id, messages: next, createdAt: new Date().toISOString() });
   }
 
@@ -339,7 +354,7 @@ export function DeepDive({
     setError("");
     setStreaming("");
     try {
-      const full = await streamInterviewTurn(history, setStreaming);
+      const full = await (await api()).streamInterviewTurn(history, setStreaming);
       const assistantTurn: ChatTurn = { role: "assistant", content: full };
       const next = [...history, assistantTurn];
       setMessages(next);
@@ -405,7 +420,7 @@ export function DeepDive({
     try {
       const transcript = buildTranscript(finalMessages);
 
-      const profile: ExtractedProfile = await extract(transcript);
+      const profile: ExtractedProfile = await (await api()).extract(transcript);
 
       const nomination = nominate(profile.axes);
       if (!nomination.ok) {
@@ -416,12 +431,12 @@ export function DeepDive({
         return;
       }
 
-      const dec = await synthesize(profile.axes, profile.gaps, nomination.candidates);
+      const dec = await (await api()).synthesize(profile.axes, profile.gaps, nomination.candidates);
       setDecision(dec);
       setMatchResult(toMatchResult(profile.axes, nomination.ranked, dec));
 
       // Beta log (derived vector + ranking only; fire-and-forget).
-      logRun(buildRunLog(id, new Date().toISOString(), profile.axes, nomination.ranked, dec));
+      if (!demo) logRun(buildRunLog(id, new Date().toISOString(), profile.axes, nomination.ranked, dec));
 
       // Fetch both cards while the loading screen is still up, so the carousel's
       // intro reveals the paintings rather than empty frames (capped at 2.5s).
@@ -432,7 +447,7 @@ export function DeepDive({
       // Stream the report.
       setStage("report");
       setBusy(false);
-      await streamReport(
+      await (await api()).streamReport(
         {
           transcript,
           axes: profile.axes,
@@ -459,7 +474,7 @@ export function DeepDive({
   function chooseReaction(n: number) {
     if (reaction !== null) return;
     setReaction(n);
-    if (runId) logReaction(runId, n);
+    if (runId && !demo) logReaction(runId, n);
   }
 
   function restart() {
@@ -541,7 +556,7 @@ export function DeepDive({
     return (
       <Layout header={{ tier: "deep", onHome }}>
         <main className="view view--center dd-intro">
-          <span className="kicker">Deep Dive</span>
+          <span className="kicker">{(import.meta.env.DEV || __PREVIEW_TOOLS__) && demo ? "Deep Dive · Demo run, no AI" : "Deep Dive"}</span>
           <h1 className="landing__title">The Deep End</h1>
           <p className="landing__sub">
             Welcome to your Deep Dive. In this section you'll answer a series of questions, one by
