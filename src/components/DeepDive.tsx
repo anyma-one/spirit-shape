@@ -533,7 +533,8 @@ export function DeepDive({
           <span className="kicker">Deep Dive · Closed beta</span>
           <h1 className="landing__title">The Deep End</h1>
           <p className="landing__sub">
-            The Deep Dive is open to beta testers for now. Enter your access code to begin.
+            The Deep Dive is for people aged 16 and over, and open to beta testers for now. Enter
+            your access code to begin.
           </p>
           <form
             className="dd-gate__form"

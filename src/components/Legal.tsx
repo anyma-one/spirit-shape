@@ -15,9 +15,12 @@ const LABELS: Record<LegalPage, string> = {
 };
 
 // Bump whenever the policy text changes — it is the date shown to readers and the
-// only version marker they have. Last change: Deep Dive brought into present tense
-// and its data handling described (2026-07-30).
-const UPDATED = "30 July 2026";
+// only version marker they have. Last change: the saved reading, the Deepen sign-up,
+// the fuller run record, the access code and the Deep Dive's 16+ age (2026-10-03).
+// TODO(legal): the 2026-10-03 changes await the lawyer pass (HANDOVER §10 #7), in
+// particular whether the run record, keyed by a run number the reader's browser also
+// holds, is "anonymous" or "pseudonymous".
+const UPDATED = "3 October 2026";
 const CONTACT = "hello@anyma.one";
 
 export function Legal({ page, onClose }: { page: LegalPage; onClose: () => void }) {
@@ -123,14 +126,18 @@ function ImprintAndPrivacy() {
           <strong>On our server:</strong> we keep an anonymous record of results (a trait pattern and
           the resulting animal, with no name, email, or other identifier) to understand and improve
           the service. For the Deep Dive this record also holds the two animals the reading named,
-          and, if you give one, the 1-to-5 rating of how much the reading felt like you. It contains
-          no part of what you wrote: the wording of your answers is removed before the record is
+          the order in which all sixteen animals fit you, your eight trait scores with how confident
+          the reading was in each, and, if you give one, the 1-to-5 rating of how much the reading
+          felt like you. It is stored under a random run number; the same number is kept in your
+          browser so that a rating you give later is added to the right record. It contains no part
+          of what you wrote: the wording of your answers is removed before the record is
           saved, leaving only the numeric trait scores.
         </li>
         <li>
           <strong>Purpose and legal basis:</strong> providing the reading you requested
           (Art. 6(1)(b)); and, for the anonymous result record, our legitimate interest in improving
-          the service (Art. 6(1)(f)). The anonymous record cannot be linked back to you.
+          the service (Art. 6(1)(f)). The record holds no name, email or other detail that identifies you, and we
+          have no way to tell whose it is.
         </li>
       </ul>
 
@@ -150,25 +157,32 @@ function ImprintAndPrivacy() {
       <p className="legal__p">
         <strong>We do not keep what you write.</strong> Your answers are processed to produce your
         reading and are not stored on our server afterwards. A copy stays in your own browser so you
-        can leave the interview and come back to it (see "Cookies and local storage"), and you can
-        clear that at any time.
+        can leave the interview and come back to it, and once the reading is finished it is kept
+        there too, so you can return to it (see "Cookies and local storage"). You can clear both
+        at any time.
       </p>
       <ul className="legal__list">
+        <li>
+          The Deep Dive is currently a closed beta. The access code you enter is checked by our
+          server and kept in your browser, so you only need to enter it once on each device.
+        </li>
+        <li>The Deep Dive is for people aged 16 and over.</li>
         <li>Legal basis: providing the reading you requested (Art. 6(1)(b)).</li>
         <li>
           Anthropic is based in the United States (see "Hosting and international transfers").
         </li>
       </ul>
 
-      <h3 className="legal__h3">3. Deep Dive waitlist (email)</h3>
+      <h3 className="legal__h3">3. Waitlists (email)</h3>
       <p className="legal__p">
-        If you join the Deep Dive waitlist, we store your email address to notify you when that tier
-        opens.
+        If you join a waitlist, we store your email address to tell you when what you signed up for
+        opens: the Deep Dive, or, if you sign up at the end of a finished Deep Dive ("Deepen the
+        Deep Dive"), the next layer that lets you go further.
       </p>
       <ul className="legal__list">
         <li>
           We use double opt-in: after you sign up we send one email to confirm, and after that we
-          only email you about the Deep Dive.
+          only email you about what you signed up for.
         </li>
         <li>
           Legal basis: your consent (Art. 6(1)(a)). You can withdraw it at any time by unsubscribing
@@ -180,8 +194,9 @@ function ImprintAndPrivacy() {
           and notification emails are sent through our email provider, Resend.
         </li>
         <li>
-          anyma does not set a minimum age, but for the waitlist specifically, if you are under 16
-          please sign up only with the consent of a parent or guardian.
+          The Speed Run and Soul Search have no minimum age; the Deep Dive is for people aged 16 and
+          over. If you are under 16, please join a waitlist only with the consent of a parent or
+          guardian.
         </li>
       </ul>
 
@@ -201,9 +216,12 @@ function ImprintAndPrivacy() {
         <li>
           <strong>Local storage (strictly necessary):</strong> we store your quiz progress and last
           result in your browser so the app can save and resume your session. For the Deep Dive this
-          includes the full interview so far, in your own words, so that a long conversation survives
-          closing the tab. All of it is functional and stays on your device; you can clear it any
-          time through your browser settings, and starting a new Deep Dive replaces it.
+          includes the access code you entered; the interview so far, in your own words, so that a
+          long conversation survives closing the tab; and, once it is finished, your reading (the
+          report, your trait scores, your two animals and your rating) so you can come back to it.
+          All of it is functional and stays on your device; you can clear it any time through your
+          browser settings. Because we keep no copy of your reading, clearing it removes the reading
+          for good.
         </li>
         <li>
           <strong>Cookieless analytics:</strong> as described above, no cookies are involved.
@@ -249,7 +267,7 @@ function ImprintAndPrivacy() {
         </li>
         <li>
           <strong>Waitlist email</strong> is kept until you unsubscribe or ask for deletion, or until
-          the Deep Dive has launched and we have contacted you, after which it is removed.
+          what you signed up for has launched and we have contacted you, after which it is removed.
         </li>
         <li>
           <strong>Server logs</strong> are kept for the period set by our host.
@@ -312,8 +330,9 @@ function Terms() {
 
       <h2 className="legal__h2">4. Who may use it</h2>
       <p className="legal__p">
-        anyma is intended for a general audience and covers no sensitive or adult content. It sets no
-        minimum age. Please note that joining the waitlist involves giving an email address; if you
+        anyma is intended for a general audience and covers no sensitive or adult content. The Speed
+        Run and Soul Search set no minimum age. The Deep Dive, a written interview conducted with AI,
+        is for people aged 16 and over. Joining a waitlist involves giving an email address; if you
         are under 16, do so only with a parent's or guardian's consent.
       </p>
 
