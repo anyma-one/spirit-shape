@@ -126,4 +126,13 @@ describe("mythology (§4/§7)", () => {
       expect(l3!.includes("\n"), `${id} must be one paragraph`).toBe(false);
     }
   });
+
+  // MYTHOLOGY-L3-BRIEF.md caps L3 at 180–260 words.
+  it("keeps every L3 within the brief's word range", () => {
+    for (const id of IDS) {
+      const words = MYTHOLOGY[id].l3!.trim().split(/\s+/).length;
+      expect(words, id).toBeGreaterThanOrEqual(180);
+      expect(words, id).toBeLessThanOrEqual(260);
+    }
+  });
 });

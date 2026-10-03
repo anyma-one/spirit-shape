@@ -52,11 +52,20 @@ export function initRevealCarousel(root: HTMLElement, opts: RevealCarouselOption
     root.querySelector<HTMLElement>('[data-key="' + key + '"]');
 
   // carousel slot for a signed rank-offset from focus: focus dead-centre, others fan out.
+  // Deep Dive cards are solid paintings, so on a narrow scene (phones) the side slots
+  // are pulled in until the card's edge stays inside it; masks keep the fixed geometry.
+  const cards = root.classList.contains("reveal-carousel--cards");
+  const scene = root.querySelector<HTMLElement>(".rc-scene");
   const POS = (o: number) => {
     const sign = o < 0 ? -1 : 1;
     const mag = Math.abs(o);
-    const x = mag === 0 ? 0 : (mag === 1 ? 205 : 340) * sign;
     const s = mag === 0 ? 1.12 : mag === 1 ? 0.5 : 0.34;
+    let dx = mag === 0 ? 0 : mag === 1 ? 205 : 340;
+    if (cards && scene && mag > 0) {
+      const cardHalf = (root.querySelector<HTMLElement>(".rc-an")?.offsetWidth ?? 240) / 2;
+      dx = Math.min(dx, scene.clientWidth / 2 - cardHalf * s - 4);
+    }
+    const x = dx * sign;
     const z = 6 - mag * 2;
     return { x, y: 0, s, z };
   };
